@@ -1,13 +1,16 @@
 #!/usr/bin/python
 from bottle import route, run, request, get, post, put, delete
 import sqlite3
-
+import dbio
 
 #*******************************************************************************
 @post('/polls')
 def __postPoll():
-
-	return "Hello World!"
+	name: =request.forms.get('name')
+    appointments =request.forms.get('appointments)
+    password =request.forms.get('password')
+    # Überprüfung der Eingaben ...
+	return dbio.postPoll(name, appointments, password)
 
 #*******************************************************************************
 @get('/polls/<PID>')
