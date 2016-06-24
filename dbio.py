@@ -13,8 +13,6 @@ def dict_factory(cursor, row):
 
 #*******************************************************************************
 def dbCall(stmt):
-    print('dbCall stmt:')
-    print (stmt)
     conn = sqlite3.connect('polls.db')
     conn.row_factory = dict_factory
     c = conn.cursor()
@@ -28,11 +26,11 @@ def stmtNextID(id, table):
     r = dbCall(stmt)[0]['max']
     if (r is None):
         r = 1
-    return r
+    return r +1
 
 #*******************************************************************************
 def postPoll(obj):
-    print obj
+    
     ### generate next poll-ID PID
     pid = stmtNextID('pid', 'polls')
 
