@@ -1,43 +1,56 @@
 #!/usr/bin/python
-from bottle import route, run, request, get, post, put, delete
+from bottle import route, run, request, get, post, put, delete, response
 import sqlite3
 import dbio
 import json
 
 #*******************************************************************************
-@post('/polls')
-def __postPoll():
-	obj = {}
-	for key, value in request.POST.iteritems():
+def getRequestObj():
+	obj = request.body.read()
+	obj = json.loads(obj)
+	for key, value in obj.iteritems():
 		print ("{0}: {1}".format(key, value))
 		obj[key]=value
-	obj['appointments'] = obj['appointments'].split(',') 
-	return dbio.postPoll(obj)
+	return obj
+
+#*******************************************************************************
+@post('/polls')
+def __postPoll():
+	obj = getRequestObj()
 	# Ueberpruefung der Eingaben ...
+	return dbio.postPoll(obj)
 
 #*******************************************************************************
 @get('/polls/<PID>')
 def __getPolls(PID=0):
-	return showPolls(PID)
+	return dbio.showPoll(PID)
 
 #*******************************************************************************
-@put('/polls<PID>')
-def __putPoll():
-    return "Hello World!"
+@put('/polls/<PID>')
+def __putPoll( PID=0 ):
+	obj = getRequestObj()
+	obj['pid'] = PID
+	return dbio.putPoll(obj)
 
 #*******************************************************************************
-@delete('/polls<PID>')
-def __delPoll():
-    return "Hello World!"
+@delete('/polls/<PID>')
+def __delPoll ( PID=0 ) :
+	obj = getRequestObj()
+	obj['pid'] = PID
+	print (obj)
+	r = dbio.deletePoll(obj)
+	if r is None:
+		response.status = 204
+	return r
 
 
 #a#*****************************************************************************
 @post('/polls/<PID>/votes')
-def __postVote():
-	obj = {}
+def __postVote(PID=0):
+	obj = getRequestObj()
 	obj['pid'] = PID
-	obj['appointment'] =request.forms.get('appointment')
-	return "Hello World!"
+	print (obj)
+	return dbio.postVote(obj)
 
 #*******************************************************************************
 @get('/polls/<PID>/votes/<VID>')
@@ -45,7 +58,7 @@ def __getVotes(PID=0, VID=0):
 	obj = {}
 	obj['pid'] = PID
 	obj['vid'] = VID
-	return "Hello World!"
+	return dbio.getVote(obj)
 
 #*******************************************************************************
 @put('/polls/<PID>/votes/<VID>')
