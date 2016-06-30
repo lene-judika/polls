@@ -62,14 +62,22 @@ def __getVotes(PID=0, VID=0):
 
 #*******************************************************************************
 @put('/polls/<PID>/votes/<VID>')
-def __putVote():
-    return "Hello World!"
+def __putVote(PID=0, VID=0):
+	obj = getRequestObj()
+	obj['pid'] = PID
+	obj['vid'] = VID
+	return dbio.putVote(obj)
 
 #*******************************************************************************
 @delete('/polls/<PID>/votes/<VID>')
-def __delVote():
-    return "Hello World!"
-
+def __delVote(PID=0, VID=0):
+	obj = {}
+	obj['pid'] = PID
+	obj['vid'] = VID
+	r = dbio.deleteVote(obj)
+	if r is None:
+		response.status = 204
+	return r
 
 
 #*******************************************************************************

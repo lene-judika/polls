@@ -163,7 +163,40 @@ def getVote(obj):
 
     stmt = "select a.date, v.vid \
             from appointments a, votes v\
-            where v.vid={0} and a.pid={1}".format(vid,pid)
+            where v.vid={0} and a.pid={1} and v.aid=a.aid".format(vid,pid)
     r = dbCall(stmt)
     print(r)
     return r[0]
+
+#*******************************************************************************
+def deleteVote(obj):
+        vid = obj['vid']
+        pid = obj['pid']
+        stmt = "delete from votes where pid={0} and vid={1}".format(pid, vid)
+        ret = dbCall(stmt)
+        print (ret)
+        return ret
+
+#*******************************************************************************
+def putVote(obj):
+    vid = obj['vid']
+    pid = obj['pid']
+    date = obj['appointment']
+    stmt = "select aid \
+            from appointments \
+            where pid={0} and date='{1}'".format(pid, date)
+    print(stmt)
+    r = dbCall(stmt)
+    print(r)
+    aid = r[0]['aid']
+    print(aid)
+
+
+    # update votes table
+    stmt = "update votes \
+            set aid = '{0}' \
+            where vid={1}".format(aid, vid )
+    r = dbCall(stmt)
+    print(r)
+
+    return getVote(obj)
