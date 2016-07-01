@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 import sqlite3
-
+from bottle import response
 
 
 
@@ -40,7 +40,13 @@ def stmtNextID(id, table):
 
 #*******************************************************************************
 def insAppointments(obj,pid):
-    app = obj['appointments']
+
+    try:
+        app = obj['appointments']
+    except:
+        response.status = 400
+        return  {'statuscode':400,
+                'reason': 'Syntax error or missing key \'appointments\'in your request'}
     for date in app:
         aid = stmtNextID('aid', 'appointments')
         stmt = "insert into appointments values({0}, {1}, '{2}')".format(aid, pid, date)
@@ -54,8 +60,17 @@ def postPoll(obj):
     pid = stmtNextID('pid', 'polls')
 
     ### insert new poll
-    n = obj['name']
-    pw = obj['password']
+    try:
+        n = obj['name']
+        pw = obj['password']
+    except:
+        response.status = 400
+        return  {'statuscode':400,
+                'reason': 'Syntax error or missing key in your request'}
+    if (len(pw) < 8):
+        response.status = 400
+        return {'statuscode':400,
+                'reason': 'the password is waaayyy tooo short. I mean: seriously?'}
     stmt = "insert into polls values ({0}, '{1}', '{2}')".format(pid, pw, n)
     ret = dbCall(stmt)
     insAppointments(obj, pid)
@@ -64,9 +79,16 @@ def postPoll(obj):
 
 #*******************************************************************************
 def putPoll(obj):
-    pid = obj['pid']
-    name = obj['name']
-    pwd = obj['password']
+    try:
+        pid = obj['pid']
+        name = obj['name']
+        pwd = obj['password']
+        apps = obj['appointments']
+    except:
+        response.status = 400
+        return  {'statuscode':400,
+                'reason': 'Syntax error or missing key in your request'}
+
     # update polls table
     stmt = "update polls \
             set name = '{0}', password = '{1}' \
@@ -76,13 +98,13 @@ def putPoll(obj):
 
     # set old appointments empty
     placeholder= '?' # For SQLite. See DBAPI paramstyle.
-    placeholders= ', '.join(placeholder for unused in obj['appointments'])
+    placeholders= ', '.join(placeholder for unused in apps )
     stmt= "update appointments \
             set date='' \
             where pid={0} and date not in ({1})".format(pid, placeholders)
     print(stmt)
-    print(obj['appointments'])
-    dbCallMany(stmt, obj['appointments'])
+    print(apps)
+    dbCallMany(stmt, apps)
 
     return showPoll(pid)
 
