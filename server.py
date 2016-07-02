@@ -16,8 +16,12 @@ def getRequestObj():
 #*******************************************************************************
 @post('/polls')
 def __postPoll():
-	obj = getRequestObj()
-	# Ueberpruefung der Eingaben ...
+	try:
+		obj = getRequestObj()
+	except:
+		response.status = 400
+		return  {'statuscode':400,
+		        'reason': 'Syntax error: no correct json'}
 	return dbio.postPoll(obj)
 
 #*******************************************************************************
@@ -28,7 +32,12 @@ def __getPolls(PID=0):
 #*******************************************************************************
 @put('/polls/<PID>')
 def __putPoll( PID=0 ):
-	obj = getRequestObj()
+	try:
+		obj = getRequestObj()
+	except:
+		response.status = 400
+		return  {'statuscode':400,
+		        'reason': 'Syntax error: no correct json'}
 	obj['pid'] = PID
 	return dbio.putPoll(obj)
 
@@ -47,7 +56,12 @@ def __delPoll ( PID=0 ) :
 #a#*****************************************************************************
 @post('/polls/<PID>/votes')
 def __postVote(PID=0):
-	obj = getRequestObj()
+	try:
+		obj = getRequestObj()
+	except:
+		response.status = 400
+		return  {'statuscode':400,
+		        'reason': 'Syntax error: no correct json'}
 	obj['pid'] = PID
 	print (obj)
 	return dbio.postVote(obj)
@@ -63,7 +77,12 @@ def __getVotes(PID=0, VID=0):
 #*******************************************************************************
 @put('/polls/<PID>/votes/<VID>')
 def __putVote(PID=0, VID=0):
-	obj = getRequestObj()
+	try:
+		obj = getRequestObj()
+	except:
+		response.status = 400
+		return  {'statuscode':400,
+		        'reason': 'Syntax error: no correct json'}
 	obj['pid'] = PID
 	obj['vid'] = VID
 	return dbio.putVote(obj)
