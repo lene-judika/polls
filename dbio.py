@@ -43,6 +43,13 @@ def validateDateFormat(datestr):
                         return  False
 
 #*******************************************************************************
+def validatePwd(pid, pwd):
+    stmt = "select pid \
+            from polls \
+            where pid={0} and password='{1}'".format(pid, pwd)
+    return dbCall(stmt) #implicit boolean
+
+#*******************************************************************************
 def getAIDfromDate(date, pid):
     stmt = "select aid \
             from appointments \
@@ -162,12 +169,19 @@ def putPoll(obj):
         response.status = 404
         return {'statuscode':404,
                 'reason': "this PID does not exist.'"}
+
     #check, if dates are valid:
     for d in apps:
         if not validateDateFormat(d):
             response.status = 400
             return  {'statuscode':400,
                     'reason': 'Date or datetime format is not valid'}
+
+    # check if password is valid:
+    if not validatePwd(pid, pwd):
+        response.status = 403
+        return  {'statuscode':403,
+                'reason': 'password invalid, sry'}
 
     # update polls table
     stmt = "update polls \
@@ -277,27 +291,24 @@ def deletePoll(obj):
         return  {'statuscode':400,
                 'reason': 'Syntax error or missing password'}
 
-    stmt = "select pid from polls where pid={0} and password='{1}'".format(pid, pwd)
-    r = dbCall(stmt)
-    print ("return pwd Call: {0}".format(r))
-    # delete only, if query returned  at least one row
-    if r is None:
+    # check if password is valid:
+    if not validatePwd(pid, pwd):
         response.status = 403
         return  {'statuscode':403,
                 'reason': 'password invalid, sry'}
-    else:
-        stmt = "delete from votes where pid={0}".format(pid)
-        ret = dbCall(stmt)
-        print (ret)
 
-        stmt = "delete from appointments where pid={0}".format(pid)
-        ret = dbCall(stmt)
-        print (ret)
+    stmt = "delete from votes where pid={0}".format(pid)
+    ret = dbCall(stmt)
+    print (ret)
 
-        stmt = "delete from polls where pid={0}".format(pid)
-        ret = dbCall(stmt)
-        print (ret)
-        response.status = 204 #empty body
+    stmt = "delete from appointments where pid={0}".format(pid)
+    ret = dbCall(stmt)
+    print (ret)
+
+    stmt = "delete from polls where pid={0}".format(pid)
+    ret = dbCall(stmt)
+    print (ret)
+    response.status = 204 #empty body
 
 #*******************************************************************************
 def getVote(obj):
