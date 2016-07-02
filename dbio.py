@@ -4,6 +4,33 @@ import sqlite3
 from bottle import response
 from datetime import datetime
 
+import err
+
+#*******************************************************************************
+def dict_factory(cursor, row):
+    d = {}
+    for idx, col in enumerate(cursor.description):
+        d[col[0]] = row[idx]
+    return d
+
+#*******************************************************************************
+def dbCall(stmt):
+    conn = sqlite3.connect('polls.db')
+    conn.row_factory = dict_factory
+    c = conn.cursor()
+    c.execute(stmt)
+    conn.commit()
+    return c.fetchall()
+
+#*******************************************************************************
+def dbCallMany(stmt, params):
+    conn = sqlite3.connect('polls.db')
+    conn.row_factory = dict_factory
+    c = conn.cursor()
+    c.execute(stmt, params)
+    conn.commit()
+    return c.fetchall()
+
 #*******************************************************************************
 def isInt(s):
     try:
@@ -49,6 +76,7 @@ def validatePwd(pid, pwd):
             where pid={0} and password='{1}'".format(pid, pwd)
     return dbCall(stmt) #implicit boolean
 
+
 #*******************************************************************************
 def getAIDfromDate(date, pid):
     stmt = "select aid \
@@ -61,36 +89,13 @@ def getAIDfromDate(date, pid):
     else:
         return r[0]['aid']
 
+
 #*******************************************************************************
 def validateID( col, id, table):
     stmt = "select count(*) as c from {0} where {1}={2}".format(table, col, id)
     print stmt
     return (dbCall(stmt)[0]['c'] == 1)
 
-#*******************************************************************************
-def dict_factory(cursor, row):
-    d = {}
-    for idx, col in enumerate(cursor.description):
-        d[col[0]] = row[idx]
-    return d
-
-#*******************************************************************************
-def dbCall(stmt):
-    conn = sqlite3.connect('polls.db')
-    conn.row_factory = dict_factory
-    c = conn.cursor()
-    c.execute(stmt)
-    conn.commit()
-    return c.fetchall()
-
-#*******************************************************************************
-def dbCallMany(stmt, params):
-    conn = sqlite3.connect('polls.db')
-    conn.row_factory = dict_factory
-    c = conn.cursor()
-    c.execute(stmt, params)
-    conn.commit()
-    return c.fetchall()
 
 #*******************************************************************************
 def stmtNextID(id, table):
@@ -100,25 +105,22 @@ def stmtNextID(id, table):
         r = 0
     return r +1
 
+
 #*******************************************************************************
 def insAppointments(apps,pid):
-    try:
-        for date in apps:
-            print (date)
-            aid = stmtNextID('aid', 'appointments')
-            stmt = "insert into appointments(aid, pid, date) \
-                    select {0},{1}, datetime('{2}') \
-                    where not exists( \
-                    select 1,2,3 from appointments \
-                    where pid={1} and date=datetime('{2}'))".format(
-                    aid, pid, date)
-            print(stmt)
-            r = dbCall(stmt)
-            print(r)
-    except:
-        response.status = 400
-        return  {'statuscode':400,
-                'reason': 'Syntax error datetime format'}
+    # dates have to be valid at this point :)
+    for date in apps:
+        print (date)
+        aid = stmtNextID('aid', 'appointments')
+        stmt = "insert into appointments(aid, pid, date) \
+                select {0},{1}, datetime('{2}') \
+                where not exists( \
+                select 1,2,3 from appointments \
+                where pid={1} and date=datetime('{2}'))".format(
+                aid, pid, date)
+        print(stmt)
+        r = dbCall(stmt)
+        print(r)
 
 
 #*******************************************************************************
@@ -134,8 +136,8 @@ def postPoll(obj):
         apps = obj['appointments']
     except:
         response.status = 400
-        return  {'statuscode':400,
-                'reason': 'Syntax error or missing key in your request'}
+        return  err.SYNTAX
+
     if (len(pw) < 8):
         response.status = 400
         return {'statuscode':400,
@@ -154,6 +156,7 @@ def postPoll(obj):
 
     return showPoll(pid)
 
+
 #*******************************************************************************
 def putPoll(obj):
     try:
@@ -163,25 +166,22 @@ def putPoll(obj):
         apps = obj['appointments']
     except:
         response.status = 400
-        return  {'statuscode':400,
-                'reason': 'Syntax error or missing key in your request'}
+        return  err.SYNTAX
+
     if  not isInt(pid) or not validateID('pid', pid, 'polls'):
         response.status = 404
-        return {'statuscode':404,
-                'reason': "this PID does not exist.'"}
+        return err.NO_PID
 
     #check, if dates are valid:
     for d in apps:
         if not validateDateFormat(d):
             response.status = 400
-            return  {'statuscode':400,
-                    'reason': 'Date or datetime format is not valid'}
+            return  err.SYNTAX_DATE
 
     # check if password is valid:
     if not validatePwd(pid, pwd):
         response.status = 403
-        return  {'statuscode':403,
-                'reason': 'password invalid, sry'}
+        return  err.INVALID_PWD
 
     # update polls table
     stmt = "update polls \
@@ -191,7 +191,7 @@ def putPoll(obj):
     print(r)
 
     # set old appointments empty
-    placeholder= '?' # For SQLite. See DBAPI paramstyle.
+    placeholder= 'datetime(?)' # For SQLite. See DBAPI paramstyle.
     placeholders= ', '.join(placeholder for unused in apps )
     stmt= "update appointments \
             set date='' \
@@ -212,8 +212,8 @@ def showPoll(pid):
 
     if not isInt(pid) or not validateID('pid', pid, 'polls'):
         response.status = 404
-        return {'statuscode':404,
-                'reason': "this PID does not exist.'"}
+        return err.NO_PID
+
     ### create return-data
     stmt = "select p.PID, p.name, a.aid, a.date  \
             from polls p, appointments a \
@@ -227,7 +227,7 @@ def showPoll(pid):
     retdict['name'] = r[0]['name']
     retdict['appointments'] = applist
 
-    # votes ermitteln
+    # detect votes
     stmt = "select a.date as date, count(vid) as cnt \
             from appointments a, votes v \
             where a.aid=v.aid and a.pid={0} \
@@ -247,31 +247,27 @@ def postVote(obj):
     pid = obj['pid']
     if not isInt(pid) or not validateID('pid', pid, 'polls'):
         response.status = 404
-        return {'statuscode':404,
-                'reason': "this PID does not exist.'"}
+        return err.NO_PID
+
     # get new date
     try:
         date = obj['appointment']
     except:
         response.status = 400
-        return  {'statuscode':400,
-                'reason': "Syntax error: could not find key 'appointment'"}
+        return  err.SYNTAX
 
     if not validateDateFormat(date):
         response.status = 400
-        return {'statuscode':400,
-                'reason': "Date or datetime format is not valid"}
+        return err.SYNTAX_DATE
 
     aid = getAIDfromDate(date, pid)
     if aid is None:
         response.status = 409
-        return {'statuscode':409,
-                'reason': "Date does not exist."}
+        return err.NO_DATE
 
     stmt = "insert into votes values({0}, {1}, {2})".format(vid, pid, aid)
     print(stmt)
     ret = dbCall(stmt)
-    print(ret)
 
     response.status = 201
     return getVote(obj)
@@ -282,32 +278,27 @@ def deletePoll(obj):
     pid = obj['pid']
     if not isInt(pid) or not validateID('pid', pid, 'polls'):
         response.status = 404
-        return {'statuscode':404,
-                'reason': "this PID does not exist.'"}
+        return err.NO_PID
     try:
         pwd = obj['password']
     except:
         response.status = 400
-        return  {'statuscode':400,
-                'reason': 'Syntax error or missing password'}
+        return  err.SYNTAX
 
     # check if password is valid:
     if not validatePwd(pid, pwd):
         response.status = 403
-        return  {'statuscode':403,
-                'reason': 'password invalid, sry'}
+        return  err.INVALID_PWD
 
     stmt = "delete from votes where pid={0}".format(pid)
     ret = dbCall(stmt)
-    print (ret)
 
     stmt = "delete from appointments where pid={0}".format(pid)
     ret = dbCall(stmt)
-    print (ret)
 
     stmt = "delete from polls where pid={0}".format(pid)
     ret = dbCall(stmt)
-    print (ret)
+
     response.status = 204 #empty body
 
 #*******************************************************************************
@@ -315,39 +306,36 @@ def getVote(obj):
     vid = obj['vid']
     if not isInt(vid) or not validateID('vid', vid, 'votes'):
         response.status = 404
-        return {'statuscode':404,
-                'reason': "this VID does not exist.'"}
+        return err.NO_VID
+
     pid = obj['pid']
     if not isInt(pid) or not validateID('pid', pid, 'polls'):
         response.status = 404
-        return {'statuscode':404,
-                'reason': "this PID does not exist.'"}
+        return err.NO_PID
 
     stmt = "select a.date, v.vid \
             from appointments a, votes v\
             where v.vid={0} and a.pid={1} and v.aid=a.aid".format(vid,pid)
     r = dbCall(stmt)
-    print(r)
     return r[0]
 
 #*******************************************************************************
 def deleteVote(obj):
-        vid = obj['vid']
-        if not isInt(vid) or not validateID('vid', vid, 'votes'):
-            response.status = 404
-            return {'statuscode':404,
-                    'reason': "this VID does not exist.'"}
-        pid = obj['pid']
-        if not isInt(pid) or not validateID('pid', pid, 'polls'):
-            response.status = 404
-            return {'statuscode':404,
-                    'reason': "this PID does not exist.'"}
+    vid = obj['vid']
+    if not isInt(vid) or not validateID('vid', vid, 'votes'):
+        response.status = 404
+        return err.NO_VID
 
-        stmt = "delete from votes where pid={0} and vid={1}".format(pid, vid)
-        ret = dbCall(stmt)
-        print (ret)
-        response.status = 204
-        return ret
+    pid = obj['pid']
+    if not isInt(pid) or not validateID('pid', pid, 'polls'):
+        response.status = 404
+        return err.NO_PID
+
+    stmt = "delete from votes where pid={0} and vid={1}".format(pid, vid)
+    ret = dbCall(stmt)
+    print (ret)
+    response.status = 204
+    return ret
 
 #*******************************************************************************
 def putVote(obj):
@@ -361,20 +349,17 @@ def putVote(obj):
     pid = obj['pid']
     if not isInt(pid) or not validateID('pid', pid, 'polls'):
         response.status = 404
-        return {'statuscode':404,
-                'reason': "this PID does not exist.'"}
+        return err.NO_PID
 
     vid = obj['vid']
     if not isInt(vid) or not validateID('vid', vid, 'votes'):
         response.status = 404
-        return {'statuscode':404,
-                'reason': "this VID does not exist.'"}
+        return err.NO_VID
 
     aid = getAIDfromDate(date,pid)
     if aid is None:
         response.status = 409
-        return {'statuscode':409,
-                'reason': "Date does not exist."}
+        return err.NO_DATE
 
     # update votes table
     stmt = "update votes \
