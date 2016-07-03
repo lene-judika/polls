@@ -4,6 +4,8 @@ import sqlite3
 import dbio
 import json
 
+import err
+
 #*******************************************************************************
 def getRequestObj():
 	obj = request.body.read()
@@ -20,8 +22,8 @@ def __postPoll():
 		obj = getRequestObj()
 	except:
 		response.status = 400
-		return  {'statuscode':400,
-		        'reason': 'Syntax error: no correct json'}
+		return  err.NO_JSON
+
 	return dbio.postPoll(obj)
 
 #*******************************************************************************
@@ -36,8 +38,8 @@ def __putPoll( PID=0 ):
 		obj = getRequestObj()
 	except:
 		response.status = 400
-		return  {'statuscode':400,
-		        'reason': 'Syntax error: no correct json'}
+		return err.NO_JSON
+
 	obj['pid'] = PID
 	return dbio.putPoll(obj)
 
@@ -60,8 +62,8 @@ def __postVote(PID=0):
 		obj = getRequestObj()
 	except:
 		response.status = 400
-		return  {'statuscode':400,
-		        'reason': 'Syntax error: no correct json'}
+		return err.NO_JSON
+
 	obj['pid'] = PID
 	print (obj)
 	return dbio.postVote(obj)
@@ -81,8 +83,8 @@ def __putVote(PID=0, VID=0):
 		obj = getRequestObj()
 	except:
 		response.status = 400
-		return  {'statuscode':400,
-		        'reason': 'Syntax error: no correct json'}
+		return err.NO_JSON
+		
 	obj['pid'] = PID
 	obj['vid'] = VID
 	return dbio.putVote(obj)
