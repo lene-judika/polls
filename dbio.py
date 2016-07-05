@@ -145,7 +145,7 @@ def postPoll(obj):
     stmt = "insert into polls values ({0}, '{1}', '{2}')".format(pid, pw, n)
     ret = dbCall(stmt)
     insAppointments(apps, pid)
-
+    response.status = 201
     return showPoll(pid)
 
 

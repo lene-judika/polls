@@ -68,7 +68,6 @@ def __postVote(PID=0):
 		return err.NO_JSON
 
 	obj['pid'] = PID
-	print (obj)
 	return dbio.postVote(obj)
 
 #*******************************************************************************
