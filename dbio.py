@@ -75,7 +75,7 @@ def validatePwd(pid, pwd):
 def getAIDfromDate(date, pid):
     stmt = "select aid \
             from appointments \
-            where pid={0} and date=datetime('{1}')".format(pid, date)
+            where pid={0} and date=	strftime('%Y-%m-%d %H:%M','{1}')".format(pid, date)
     r = dbCall(stmt)
     print r
     if not r:
@@ -107,10 +107,10 @@ def insAppointments(apps,pid):
         print (date)
         aid = stmtNextID('aid', 'appointments')
         stmt = "insert into appointments(aid, pid, date) \
-                select {0},{1}, datetime('{2}') \
+                select {0},{1}, strftime('%Y-%m-%d %H:%M','{2}') \
                 where not exists( \
                 select 1,2,3 from appointments \
-                where pid={1} and date=datetime('{2}'))".format(
+                where pid={1} and date=strftime('%Y-%m-%d %H:%M','{2}'))".format(
                 aid, pid, date)
         print(stmt)
         r = dbCall(stmt)
@@ -183,7 +183,7 @@ def putPoll(obj):
     print(r)
 
     # set old appointments empty
-    placeholder= 'datetime(?)' # For SQLite. See DBAPI paramstyle.
+    placeholder= "strftime('%Y-%m-%d %H:%M',?)" # For SQLite. See DBAPI paramstyle.
     placeholders= ', '.join(placeholder for unused in apps )
     stmt= "update appointments \
             set date='' \
@@ -222,7 +222,7 @@ def showPoll(pid):
     # detect votes
     stmt = "select a.date as date, count(vid) as cnt \
             from appointments a, votes v \
-            where a.aid=v.aid and a.pid={0} \
+            where a.aid=v.aid and a.pid={0}  and a.date != '' \
             group by(a.aid)".format(retdict['PID'])
     r = dbCall(stmt)
     votes = {}
