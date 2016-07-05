@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from bottle import route, run, request, get, post, put, delete, response
+from bottle import route, run, request, get, post, put, delete, response, error
 import sqlite3
 import dbio
 import json
@@ -102,6 +102,15 @@ def __delVote(PID=0, VID=0):
 	if r is None:
 		response.status = 204
 	return r
+
+#*******************************************************************************
+@error(404)
+def error404(error):
+	return json.dumps(err.NOT_FOUND, indent=4)
+
+@error(405)
+def error404(error):
+	return json.dumps(err.NOT_ALLOWED, indent=4)
 
 
 #*******************************************************************************

@@ -15,3 +15,7 @@ SHORT_PWD = {'statuscode':400, 'reason': 'the password is waaayyy tooo short.'}
 NO_DATE = {'statuscode':409, 'reason': "Date does not exist."}
 
 NO_JSON = {'statuscode':400, 'reason': 'Syntax error: no correct json'}
+
+NOT_FOUND = {'statuscode':404, 'reason': 'Nothing here...'}
+
+NOT_ALLOWED = {'statuscode':405, 'reason': 'Method not allowed, sry'}
