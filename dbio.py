@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 import sqlite3
 from bottle import response
@@ -42,28 +42,22 @@ def isInt(s):
 #*******************************************************************************
 def validateDateFormat(datestr):
     try:
-        print ("in try Y-m-d ")
-        print datestr
         datetime.strptime(datestr, '%Y-%m-%d')
         return True
     except :
         try:
-            print ("in try Y-m-d H:M ")
             datetime.strptime(datestr, '%Y-%m-%d %H:%M')
             return True
         except:
             try:
-                print ("in try Y-m-dTH:M ")
                 datetime.strptime(datestr, '%Y-%m-%dT%H:%M')
                 return True
             except:
                 try:
-                    print ("in try Y-m-dTH:M:S")
                     datetime.strptime(datestr, '%Y-%m-%dT%H:%M:%S')
                     return True
                 except:
                     try:
-                        print ("in try Y-m-d H:M:S")
                         datetime.strptime(datestr, '%Y-%m-%d %H:%M:%S')
                         return True
                     except:
@@ -140,14 +134,12 @@ def postPoll(obj):
 
     if (len(pw) < 8):
         response.status = 400
-        return {'statuscode':400,
-                'reason': 'the password is waaayyy tooo short. I mean: seriously?'}
+        return err.SHORT_PWD
     #check, if dates are valid:
     for d in apps:
         if not validateDateFormat(d):
             response.status = 400
-            return  {'statuscode':400,
-                    'reason': 'Date or datetime format is not valid'}
+            return err.SYNTAX_DATE
 
     # if everything is valid, insertions can be done:
     stmt = "insert into polls values ({0}, '{1}', '{2}')".format(pid, pw, n)
@@ -343,8 +335,7 @@ def putVote(obj):
         date = obj['appointment']
     except:
         response.status = 400
-        return  {'statuscode':400,
-                'reason': "Syntax error: could not find key 'appointment'"}
+        return err.SYNTAX
 
     pid = obj['pid']
     if not isInt(pid) or not validateID('pid', pid, 'polls'):

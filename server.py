@@ -1,14 +1,17 @@
-#!/usr/bin/python
+#!/usr/bin/env python2
 from bottle import route, run, request, get, post, put, delete, response
 import sqlite3
 import dbio
 import json
+import ast
 
 import err
 
 #*******************************************************************************
 def getRequestObj():
 	obj = request.body.read()
+	obj = ast.literal_eval(obj)
+	obj = json.dumps(obj)
 	obj = json.loads(obj)
 	for key, value in obj.iteritems():
 		print ("{0}: {1}".format(key, value))
@@ -84,7 +87,7 @@ def __putVote(PID=0, VID=0):
 	except:
 		response.status = 400
 		return err.NO_JSON
-		
+
 	obj['pid'] = PID
 	obj['vid'] = VID
 	return dbio.putVote(obj)
