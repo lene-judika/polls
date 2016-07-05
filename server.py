@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 from bottle import route, run, request, get, post, put, delete, response
 import sqlite3
 import dbio

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 import sqlite3
 from bottle import response
@@ -207,7 +207,7 @@ def showPoll(pid):
         return err.NO_PID
 
     ### create return-data
-    stmt = "select p.PID, p.name, a.aid, a.date  \
+    stmt = "select p.pid as pid, p.name, a.aid, a.date  \
             from polls p, appointments a \
             where p.pid={0} and a.pid={1}".format(pid,pid)
     r = dbCall(stmt)
@@ -215,7 +215,7 @@ def showPoll(pid):
     retdict = {}
     for row in r:
         applist.append(row['date'])
-    retdict['pid'] = r[0]['pid']
+    retdict['PID'] = r[0]['pid']
     retdict['name'] = r[0]['name']
     retdict['appointments'] = applist
 
@@ -223,7 +223,7 @@ def showPoll(pid):
     stmt = "select a.date as date, count(vid) as cnt \
             from appointments a, votes v \
             where a.aid=v.aid and a.pid={0} \
-            group by(a.aid)".format(retdict['pid'])
+            group by(a.aid)".format(retdict['PID'])
     r = dbCall(stmt)
     votes = {}
     for row in r:
@@ -305,7 +305,7 @@ def getVote(obj):
         response.status = 404
         return err.NO_PID
 
-    stmt = "select a.date, v.vid \
+    stmt = "select a.date, v.vid as VID\
             from appointments a, votes v\
             where v.vid={0} and a.pid={1} and v.aid=a.aid".format(vid,pid)
     r = dbCall(stmt)

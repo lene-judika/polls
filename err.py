@@ -10,6 +10,8 @@ SYNTAX = {'statuscode':400, 'reason': 'Syntax error or missing key in your reque
 
 INVALID_PWD = {'statuscode':403, 'reason': 'password invalid, sry'}
 
+SHORT_PWD = {'statuscode':400, 'reason': 'the password is waaayyy tooo short.'}
+
 NO_DATE = {'statuscode':409, 'reason': "Date does not exist."}
 
 NO_JSON = {'statuscode':400, 'reason': 'Syntax error: no correct json'}
