@@ -1,4 +1,4 @@
-{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, GADTs, DeriveGeneric, OverloadedStrings, TemplateHaskell, TupleSections #-}
+{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, GADTs, DeriveGeneric, OverloadedStrings, TemplateHaskell, TupleSections, FlexibleInstances #-}
 
 module Main(main) where
   import GHC.Generics
@@ -12,10 +12,8 @@ module Main(main) where
 
   import qualified Data.ByteString.Lazy as L
 
-  --import Data.Aeson((.:))
   import Data.Aeson hiding (Error, Result)
   import Data.Aeson.Types(typeMismatch)
-  --import Data.Aeson.Types hiding (Error)
 
   import Data.Set(Set)
   import qualified Data.Set as Set
@@ -213,9 +211,6 @@ module Main(main) where
       liftIO $ Gtk.cellLayoutSetAttributes col cr ls (\ind -> [Gtk.cellText := ind])
       liftIO $ Gtk.treeViewSetHeadersVisible tv False
 
-      -- adj <- Gtk.adjustmentNew 400.0 400.0 400.0 0.0 0.0 10.0
-      -- Gtk.set tv [Gtk.treeViewVAdjustment := Just adj]
-
       cb <- liftReader $ mkCallback (fmap (Just . f . head . fst) . Gtk.treeViewGetCursor) tv
       _ <- liftIO $ Gtk.on tv Gtk.cursorChanged cb
 
@@ -317,6 +312,9 @@ module Main(main) where
 
   type Cmd msg = [IO msg]
 
+  noCmd :: Cmd msg
+  noCmd = mempty
+
   execCmd :: (model -> msg -> (model, Cmd msg)) -> model -> Cmd msg -> IO model --TODO fold it
   execCmd _ m []     = return m
   -- FIXME this is highly recursive, a recursive cmd will break the app
@@ -325,18 +323,14 @@ module Main(main) where
     let (m',cs') = u m msg
     execCmd u m' (cs ++ cs')
 
-  noCmd :: Cmd msg
-  noCmd = mempty
-
-
   type Appointment = UTCTime
 
   data Poll = Poll
-    { _pid  :: Maybe Int
-    , _name :: String
-    , _votes :: Map (Maybe Appointment) Int
+    { _pollPid  :: Maybe Int
+    , _pollName :: String
+    , _pollVotes :: Map (Maybe Appointment) Int
   }
-  makeLenses ''Poll
+  makeFields ''Poll
 
   emptyPoll :: Poll
   emptyPoll = Poll Nothing "" Map.empty
@@ -345,10 +339,10 @@ module Main(main) where
     toPoll :: p -> Either String Poll
 
   data JsonPollGetResp = JsonPollGetResp
-    { pgPid :: Int
-    , pgName :: String
-    , pgAppointments :: [String]
-    , pgVotes :: Map String Int
+    { _JsonPollGetRespPid :: Int
+    , _JsonPollGetRespName :: String
+    , _JsonPollGetRespAppointments :: [String]
+    , _JsonPollGetRespVotes :: Map String Int
     } deriving (Generic, Show)
 
   instance ToPoll JsonPollGetResp where
@@ -426,44 +420,39 @@ module Main(main) where
 
   data Message = SendPollRead Int | RecvPollRead Poll | Error String | NoOp | Disconnect | Connect | SetTempHost String | SetCursor Int | ReadPoll | SetRead String | ToOverview | CreatePoll
 
-  data Model = Connected { _modelConnected :: ModelConnected } | Disconnected { _modelDisconnected :: ModelDisconnected }
+  data Model = Connected ModelConnected | Disconnected ModelDisconnected
 
   data ModelConnected = ModelConnected
-    { _hostname :: String
-    , _polls :: Map Int Poll
-    , _pollIdx :: Maybe Int
-    , _mode :: Mode
+    { _modelConnectedHostname :: String
+    , _modelConnectedPolls :: Map Int Poll
+    , _modelConnectedPollIdx :: Maybe Int
+    , _modelConnectedMode :: Mode
     }
 
-  data Mode = Overview | Read { _idx :: Maybe Int } | Change { _changeMode :: ChangeMode, _poll :: Poll }
+  data Mode = Overview | Read (Maybe Int) | Change ChangeMode Poll
 
   data ChangeMode = Update | Create
 
   data ModelDisconnected = ModelDisconnected
-    { _tempHostname :: String
+    { _modelDisconnectedHostname :: String
     }
-  makeLenses ''ModelConnected
-  makeLenses ''ModelDisconnected
-  makeLenses ''Mode
-  makeLenses ''ChangeMode
-  makeLenses ''Model
+  makeFields ''ModelConnected
+  makeFields ''ModelDisconnected
+  makePrisms ''Mode
+  makeFields ''ChangeMode
+  makePrisms ''Model
 
-  connected :: String -> Map Int Poll -> Maybe Int -> Mode -> Model
-  connected h p i m = Connected $ ModelConnected h p i m
-
-  disconnected :: String -> Model
-  disconnected = Disconnected . ModelDisconnected
 
   initModel :: (Model, Cmd Message)
-  initModel = (disconnected "http://127.0.0.1:8080", noCmd)
+  initModel = (Disconnected $ ModelDisconnected "http://127.0.0.1:8080", noCmd)
 
   update :: Model -> Message -> (Model, Cmd Message)
-  update (Disconnected m) Connect       = (connected (m^.tempHostname) Map.empty Nothing Overview, noCmd)
+  update (Disconnected m) Connect       = (Connected $ ModelConnected (m^.hostname) Map.empty Nothing Overview, noCmd)
   update (Connected _) Disconnect       = initModel
 
   update (Connected m) ToOverview       = (Connected $ m & mode .~ Overview, noCmd)
   --update (Connected m) CreatePoll       = (Connected $ m & mode .~ Change Create emptyPoll, noCmd)
-  update (Connected m) (SetRead s)      = (Connected $ m & mode.idx %~ (readMaybe s <|>), noCmd)
+  update (Connected m) (SetRead s)      = (Connected $ m & mode._Read %~ (readMaybe s <|>), noCmd)
   update (Connected m) ReadPoll         = (Connected $ m & mode .~ Read Nothing, noCmd)
   update (Connected m) (SendPollRead n) = (Connected m, [send GET readPoll Error (m^.hostname ++ "/polls/" ++ show n), return ToOverview])
   update (Connected m) (RecvPollRead p) = (Connected $ m & polls %~ Map.insert (fromJust $ p^.pid) p, noCmd) -- XXX fromJust seems pretty Hacky
@@ -473,7 +462,7 @@ module Main(main) where
   view :: Model -> Widget Message
   view (Disconnected m) = mkBox Vertical
       [ mkLabel "Enter Hostname:"
-      , mkText (m^.tempHostname) (Just ([OnFocusLost], SetTempHost))
+      , mkText (m^.hostname) (Just ([OnFocusLost], SetTempHost))
       , mkButton "Connect" (Just Connect)
       ]
   view (Connected m) = mkBox Vertical
