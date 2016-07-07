@@ -209,7 +209,7 @@ def showPoll(pid):
     ### create return-data
     stmt = "select p.pid as pid, p.name, a.aid, a.date  \
             from polls p, appointments a \
-            where p.pid={0} and a.pid={1}".format(pid,pid)
+            where p.pid={0} and a.pid={1} and a.date != '' ".format(pid,pid)
     r = dbCall(stmt)
     applist = []
     retdict = {}
@@ -222,7 +222,7 @@ def showPoll(pid):
     # detect votes
     stmt = "select a.date as date, count(vid) as cnt \
             from appointments a, votes v \
-            where a.aid=v.aid and a.pid={0}  and a.date != '' \
+            where a.aid=v.aid and a.pid={0}  \
             group by(a.aid)".format(retdict['PID'])
     r = dbCall(stmt)
     votes = {}
