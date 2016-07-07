@@ -15,8 +15,6 @@ module Component
     update    :: model -> Recv model -> (model, Cmd (Send model))
     view      :: model -> Widget (Send model)
 
-
-
   class HasFormCallbacks p where
     type Unwrapped p
     type Wrapped   p
@@ -24,5 +22,3 @@ module Component
     wrapMsg   :: p -> Unwrapped p -> Wrapped p
     abortMsg  :: p -> Wrapped p
     returnMsg :: p -> Return p -> Wrapped p
-  --
-  -- class (HasFormCallbacks f msg msg' a) => Form model msg msg' f a where

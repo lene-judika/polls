@@ -1,10 +1,10 @@
 {-# LANGUAGE TemplateHaskell, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances, TypeFamilies #-}
 
-module ConnectionManager (Model, Msg, initModel, update, view) where
+module ConnectionManager (Model, Msg) where
   import Widget
   import Command
   import Component
-  import qualified Poll.CRUDApp as CRUDPoll
+  import qualified PollCRUDApp as CRUDPoll
 
   import Control.Arrow
 
