@@ -1,4 +1,4 @@
-module Lib (deriveFromJSONLensLike) where
+module Helper (deriveFromJSONLensLike) where
 
   import Language.Haskell.TH.Syntax
 
