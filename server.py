@@ -111,6 +111,16 @@ def error404(error):
 def error404(error):
 	return json.dumps(err.NOT_ALLOWED, indent=4)
 
+#*******************************************************************************
+@route('/polls', method=['OPTIONS'])
+def __optionsPolls():
+	response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+
+#*******************************************************************************
+#@route('/polls/<PID>', method=['OPTIONS'])
+#def __optionsPollsPID():
+#	response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+
 
 #*******************************************************************************
 run(host='localhost', port=8080, debug=True)

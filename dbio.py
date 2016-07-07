@@ -305,7 +305,7 @@ def getVote(obj):
         response.status = 404
         return err.NO_PID
 
-    stmt = "select a.date, v.vid as VID\
+    stmt = "select a.date as appointment, v.vid as VID\
             from appointments a, votes v\
             where v.vid={0} and a.pid={1} and v.aid=a.aid".format(vid,pid)
     r = dbCall(stmt)
