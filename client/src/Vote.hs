@@ -53,6 +53,6 @@ module Vote
   instance FromJSON JsonVoteResp where
     parseJSON (Object v) = JsonVoteResp <$>
       v .: "VID" <*>
-      v .: "date" --XXX api i wrong here
+      v .: "appointment"
     -- A non-Object value is of the wrong type, so fail.
     parseJSON invalid = typeMismatch "Poll" invalid

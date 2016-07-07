@@ -1,5 +1,5 @@
 module Main (main) where
-  import App
+  import RunApp
   import Command
   import ConnectionManager
   import Component

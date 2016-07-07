@@ -112,7 +112,7 @@ module Widget
           Vertical   -> \b i -> Gtk.toBox <$> Gtk.vBoxNew b i
       box <- liftIO $ newBox False 10
       ws' <- mapM mkWidget ws
-      liftIO $ mapM_ (\w -> Gtk.boxPackStart box w Gtk.PackGrow 0) ws' --TODO make packing an attribute to Box
+      liftIO $ mapM_ (\w -> Gtk.boxPackStart box w Gtk.PackNatural 0) ws' --TODO make packing an attribute to Box
       return box
 
 
@@ -254,7 +254,6 @@ module Widget
       w' <- mkWidget w
 
       liftIO $ Gtk.scrolledWindowSetPolicy sw Gtk.PolicyAutomatic Gtk.PolicyAutomatic
-
 
       liftIO $ Gtk.containerAdd sw w'
 

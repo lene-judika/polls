@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleContexts, TypeFamilies #-}
 
-module App (runStarterApp, runApp) where
+module RunApp (runStarterApp, runApp) where
 
   import Widget
   import Command

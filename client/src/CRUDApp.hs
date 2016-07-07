@@ -57,12 +57,12 @@ module CRUDApp
     | Error String
 
   data Info r a i = Info
-    { _infoIdentifier :: a -> i
-    , _infoNew        :: a
-    , _infoDef        :: Maybe i
-    , _infoActions    :: Actions a i
-    , _infoName       :: a -> String
-    , _infoDisplayInit    :: r
+    { _infoIdentifier  :: a -> i
+    , _infoNew         :: a
+    , _infoDef         :: Maybe i
+    , _infoActions     :: Actions a i
+    , _infoName        :: a -> String
+    , _infoDisplayInit :: r
     }
   makeFields ''Info
 
@@ -116,7 +116,7 @@ module CRUDApp
     update m (SelectorMsg msg) = maybe (m, mempty) (first (\m' -> m & mode._ModeRead .~ m'))                 (update <$> (m^?mode._ModeRead)      <*> pure msg)
     update m (ChangerMsg msg)  = maybe (m, mempty) (first (\m' -> m & mode._ModeChange._2 .~ m'))            (update <$> (m^?mode._ModeChange._2) <*> pure msg)
     update m (DisplayMsg msg)  = maybe (m, mempty) ((\m' -> m & display._Just._2 .~ m') *** fmap DisplayMsg) (update <$> (m^?display._Just._2)    <*> pure msg)
-    update _ (Error s)         = error s --TODO better error handling
+    update m (Error s)         = (m, cmd (putStrLn s >> return Ignore)) --TODO better error handling
 
     view (Model i vs c ModeOverview) = mkBox Horizontal $
       [ mkScrolledWindow $ mkTextList (Map.elems vs) (i^.name) (Just SetCursor) --TODO highlight cursor
