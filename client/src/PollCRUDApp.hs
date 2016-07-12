@@ -21,55 +21,38 @@ module PollCRUDApp (Model, Msg, initModel, update, view) where
 
   import Data.Aeson
 
-  import Control.Exception
-
   import Control.Applicative
-
-  import Control.Monad
-  import Control.Monad.IO.Class
-  import Control.Monad.Trans.Except
 
   import Control.Lens hiding (view, (.=))
 
   import Text.Read
 
-  import Network.HTTP hiding (password)
-  import Network.Stream
-  import Network.URI
 
-  type Msg = CRUD.Msg PollDisplayMsg PollSelectorMsg PollChangerMsg Poll PID
 
   data PollDisplayModel = PollDisplayModel Poll VoteCRUD.Model
 
   data PollDisplayMsg = VoteCRUDMsg VoteCRUD.Msg
 
-  instance Component PollDisplayModel where
-    type Recv PollDisplayModel = PollDisplayMsg
-    type Send PollDisplayModel = PollDisplayMsg
-    type Init PollDisplayModel = (Poll, String)
-    initModel (p, h) = let (m',c) = initModel (h ++ "/polls/" ++ show (p^.pid)) in (PollDisplayModel p m', fmap VoteCRUDMsg c)
-    update (PollDisplayModel p m) (VoteCRUDMsg msg) = let (m', c) = update m msg in (PollDisplayModel p m', fmap VoteCRUDMsg c)
-    view (PollDisplayModel p m) = mkBox Horizontal
-      [ mkBox Vertical
-        [ mkLabel ("pid: "      ++ show (p^.pid))
-        , mkLabel ("name: "     ++ show (p^.name))
-        , mkLabel ("password: " ++ (show . fromMaybe "<unknown>" $ (p^.password)))
-        , mkScrolledWindow $ mkTextList (Map.assocs (p^.votes)) (\(a,v) -> maybe "<deleted>" showISO8601 a ++ ": " ++ show v) Nothing
-        ]
-        , VoteCRUDMsg <$> view m
+  pollDisplay :: String -> Component m Poll PollDisplayModel PollDisplayMsg (CRUD.DisplayEvent PID)
+  pollDisplay h = Component (displayInit h) displayUpdate displayView
+
+  displayInit :: String -> Poll ->  PollDisplayModel
+  displayInit h p = PollDisplayModel p ((voteComponent^.initModel) (h ++ "/polls/" ++ show (p^.pid)))
+    --let (m',c) = initModel (h ++ "/polls/" ++ show (p^.pid)) in (PollDisplayModel p m', fmap VoteCRUDMsg c)
+  update (PollDisplayModel p m) (VoteCRUDMsg msg) = let (m', c) = update m msg in (PollDisplayModel p m', fmap VoteCRUDMsg c)
+  view (PollDisplayModel p m) = mkBox Horizontal
+    [ mkBox Vertical
+      [ mkLabel ("pid: "      ++ show (p^.pid))
+      , mkLabel ("name: "     ++ show (p^.name))
+      , mkLabel ("password: " ++ (show . fromMaybe "<unknown>" $ (p^.password)))
+      , mkScrolledWindow $ mkTextList (Map.assocs (p^.votes)) (\(a,v) -> maybe "<deleted>" show a ++ ": " ++ show v) Nothing
       ]
+      , VoteCRUDMsg <$> view m
+    ]
 
   data PollSelectorModel = PollSelectorModel (Maybe PID)
 
   data PollSelectorMsg = SetPID String
-
-  instance HasFormCallbacks PollSelectorModel where
-    type Unwrapped PollSelectorModel = Recv PollSelectorModel
-    type Wrapped PollSelectorModel   = Send PollSelectorModel
-    type Return  PollSelectorModel   = PID
-    wrapMsg   _ = CRUD.SelectorMsg
-    abortMsg  _ = CRUD.Back
-    returnMsg _ = CRUD.Read
 
   instance Component PollSelectorModel where
     type Recv PollSelectorModel = PollSelectorMsg
@@ -98,14 +81,6 @@ module PollCRUDApp (Model, Msg, initModel, update, view) where
     }
   makeLenses ''PollChangerModel
 
-  instance HasFormCallbacks PollChangerModel where
-    type Unwrapped PollChangerModel = Recv PollChangerModel
-    type Wrapped PollChangerModel   = Send PollChangerModel
-    type Return  PollChangerModel   = Poll
-    wrapMsg   _ = CRUD.ChangerMsg
-    abortMsg  _ = CRUD.Back
-    returnMsg _ = CRUD.Send
-
   instance Component PollChangerModel where
     type Recv PollChangerModel = PollChangerMsg
     type Send PollChangerModel = Msg
@@ -133,6 +108,9 @@ module PollCRUDApp (Model, Msg, initModel, update, view) where
         , mkButton "Back" (Just (abortMsg m))
         ]
       ]
+
+
+  --type Msg = CRUD.Msg PollDisplayMsg PollSelectorMsg PollChangerMsg Poll PID
 
   data Model = Model
     { _crud :: CRUD.Model PollDisplayModel PollSelectorModel PollChangerModel String Poll PID
@@ -203,23 +181,3 @@ module PollCRUDApp (Model, Msg, initModel, update, view) where
 
   deleteCmd :: String -> Poll -> Cmd (Either String ())
   deleteCmd h p = cmd . runExceptT $ send (h ++ "/polls/" ++ show (p^.pid)) DELETE (passwordOnlyBody p) (const (Right ()))
-
-  handleError :: String -> String
-  handleError = id
-
-  liftExceptT = ExceptT . return
-
-  send :: String -> RequestMethod -> String -> (String -> Either String a) ->  ExceptT String IO a
-  send h r body f = do
-    uri <- ExceptT . return . maybe (Left $ "ParseError: Not a valid URI: " ++ h) Right . parseURI $ h
-    let req = setRequestBody (mkRequest r uri) ("application/json", body)
-    liftIO . print $ req
-    liftIO . putStrLn . rqBody $ req
-    response <- join . fmap (withExceptT show . liftExceptT) . withExceptT (show :: IOException -> String) . ExceptT . try . simpleHTTP $ req -- TODO replace show, for better error messages
-    liftIO . print $ response
-    liftIO . putStrLn . rspBody $ response
-    case rspCode response of
-      (2,_,_) ->
-        liftExceptT . f . rspBody $ response
-      _ ->
-        throwE . handleError . rspBody $ response

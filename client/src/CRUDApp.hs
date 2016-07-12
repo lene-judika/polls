@@ -2,6 +2,12 @@
 
 module CRUDApp
   ( crudComponent
+  , ChangeAction(..)
+  , DisplayEvent(..)
+  , SelectorEvent(..)
+  , ChangerEvent(..)
+  , Model
+  , Msg
   ) where
 
   import Widget
@@ -74,7 +80,7 @@ module CRUDApp
     }
   makeFields ''Model
 
-  data Event a i = Create a | Read i | Update a | Delete i
+  data Event a i -- = Create a | Read i | Update a | Delete i
 
   displayEvent :: DisplayEvent i -> Msg dmsg smsg cmsg a i
   displayEvent (DEChanged i) = ReadCmd i

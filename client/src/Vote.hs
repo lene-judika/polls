@@ -10,13 +10,11 @@ module Vote
   ) where
 
   import Poll
+  import Appointment
 
   import GHC.Generics
 
   import Data.String
-
-  import Data.Time.Clock
-  import Data.Time.Calendar
 
   import Data.Aeson hiding (Error, Result)
   import Data.Aeson.Types(typeMismatch)
@@ -33,7 +31,7 @@ module Vote
   makeLenses ''Vote
 
   newVote :: Vote
-  newVote = Vote 0 (UTCTime (fromGregorian 2016 1 1) (secondsToDiffTime 0))
+  newVote = Vote 0 (mkAppointment 2016 1 1)
 
   readVote :: String -> Either String Vote
   readVote msg = do
@@ -46,9 +44,7 @@ module Vote
     } deriving (Generic, Show)
 
   toVote :: JsonVoteResp -> Either String Vote
-  toVote (JsonVoteResp v a) = do
-    vote <- maybe (Left $ "Not a valid IOS8601-Date: " ++ a) Right (parseISO8601 a)
-    return $ Vote v vote
+  toVote (JsonVoteResp v a) = Vote v <$> readAppointmentEither a
 
   instance FromJSON JsonVoteResp where
     parseJSON (Object v) = JsonVoteResp <$>

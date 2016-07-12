@@ -9,12 +9,12 @@ module Poll
   , newPoll
   , FromPoll(..)
   , PID
-  , Appointment
-  , parseISO8601
-  , showISO8601
   , mkVotes
   , readPoll
   ) where
+
+  import Appointment
+  import Network
 
   import GHC.Generics
 
@@ -29,16 +29,11 @@ module Poll
   import Data.Aeson hiding (Error, Result)
   import Data.Aeson.Types(typeMismatch)
 
-  import Data.Time.Clock
-  import Data.Time.Format
-
   import Control.Applicative
 
   import Control.Lens
 
   type PID = Int
-
-  type Appointment = UTCTime
 
   data Poll = Poll
     { _pid      :: PID
@@ -52,24 +47,14 @@ module Poll
     fromPoll :: Poll -> p
 
   newPoll :: Poll
-  newPoll = Poll 0 "" (Map.singleton (parseISO8601 "2016-10-10") 0) Nothing
-
-  parseISO8601 :: String -> Maybe Appointment
-  parseISO8601 t = parseTimeM False defaultTimeLocale "%Y-%m-%d" t <|>
-                   parseTimeM False defaultTimeLocale "%Y-%m-%dT%H:%M" t
-
-  showISO8601 :: Appointment -> String
-  showISO8601 = formatTime defaultTimeLocale "%Y-%m-%dT%H:%M"
-
-  mkAppointment :: String -> Either String (Maybe Appointment)
-  mkAppointment "" = return Nothing
-  mkAppointment s  = Just <$> maybe (Left $ "ParseError: invalid ISO8601-Date: " ++ s) Right (parseISO8601 s)
+  newPoll = Poll 0 "" (Map.singleton (readAppointmentMaybe "2016-10-10") 0) Nothing
 
   mkVotes :: [String] -> Map String Int -> Either String (Map (Maybe Appointment) Int)
   mkVotes as vs = do
-    as' <- catMaybes <$> mapM mkAppointment as
-    vs' <- Map.fromList <$> mapM (\(s,i) -> (,i) <$> mkAppointment s ) (Map.assocs vs)
+    as' <- catMaybes <$> mapM readA as
+    vs' <- Map.fromList <$> mapM (\(s,i) -> (,i) <$> readA s ) (Map.assocs vs)
     return (mkVotes' as' vs')
+      where readA = (Just <$>) . readAppointmentEither
 
   -- filter map keys, only keep the ones from the List
   mkVotes' :: [Appointment] -> Map (Maybe Appointment) Int -> Map (Maybe Appointment) Int

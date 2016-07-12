@@ -2,7 +2,6 @@
 
 module VoteCRUDApp (Model, Msg, initModel, update, view) where
   import Vote
-  import Poll
 
   import Component
   import Command
@@ -11,6 +10,7 @@ module VoteCRUDApp (Model, Msg, initModel, update, view) where
 
   import GHC.Generics
 
+  import Data.Tuple
   import Data.Maybe
   import qualified Data.Map as Map
 
@@ -21,119 +21,92 @@ module VoteCRUDApp (Model, Msg, initModel, update, view) where
 
   import Data.Aeson
 
-  import Control.Exception
 
   import Control.Applicative
-
-  import Control.Monad
-  import Control.Monad.IO.Class
-  import Control.Monad.Trans.Except
 
   import Control.Lens hiding (view, (.=))
 
   import Text.Read
 
-  import Network.HTTP hiding (password)
-  import Network.Stream
-  import Network.URI
+  data DisplayModel = DisplayModel Vote
 
-  type Msg = CRUD.Msg VoteDisplayMsg VoteSelectorMsg VoteChangerMsg Vote VID
+  data DisplayMsg
 
-  data VoteDisplayModel = VoteDisplayModel Vote
+  display :: Component m Vote DisplayModel DisplayMsg (CRUD.DisplayEvent VID)
+  display = Component DisplayModel ActionIgnore displayView
 
-  data VoteDisplayMsg
+  displayView (DisplayModel v) = mkBox Vertical
+    [ mkLabel ("VID: "         ++ show (v^.vid))
+    , mkLabel ("Appointment: " ++ show (v^.appointment))
+    ]
 
-  instance Component VoteDisplayModel where
-    type Recv VoteDisplayModel = VoteDisplayMsg
-    type Send VoteDisplayModel = VoteDisplayMsg
-    type Init VoteDisplayModel = (Vote, ())
-    initModel (v,()) = (VoteDisplayModel v, mempty)
-    update v msg = (v, mempty)
-    view (VoteDisplayModel v) = mkBox Vertical
-      [ mkLabel ("vid: "         ++ show (v^.vid))
-      , mkLabel ("appointment: " ++ show (v^.appointment))
+  data SelectorModel = SelectorModel { cursor :: Maybe VID }
+
+  data SelectorMsg = SetVID String | SendVID | CancelSelector
+
+  selector :: Component m (Maybe VID) SelectorModel SelectorMsg (CRUD.SelectorEvent VID)
+  selector = Component SelectorModel selectorUpdate selectorView
+
+  selectorUpdate m (SetVID s)     = ActionModel . SelectorModel $ readMaybe s <|> cursor m
+  selectorUpdate m SendVID        = maybe ActionIgnore (ActionEvent CRUD.SESelect) (cursor m)
+  selectorUpdate _ CancelSelector = ActionEvent CRUD.SEClose
+
+  selectorView m@(SelectorModel p) = mkBox Vertical
+    [ mkLabel "Enter VID"
+    , mkText (maybe "" show p) (Just ([OnFocusLost], SetVID))
+    , mkBox Horizontal
+      [ mkButton "Ok"   SendVID
+      , mkButton "Back" CancelSelector
       ]
-
-  data VoteSelectorModel = VoteSelectorModel (Maybe VID)
-
-  data VoteSelectorMsg = SetVID String
-
-  instance HasFormCallbacks VoteSelectorModel where
-    type Unwrapped VoteSelectorModel = Recv VoteSelectorModel
-    type Wrapped VoteSelectorModel   = Send VoteSelectorModel
-    type Return  VoteSelectorModel   = VID
-    wrapMsg   _ = CRUD.SelectorMsg
-    abortMsg  _ = CRUD.Back
-    returnMsg _ = CRUD.Read
-
-  instance Component VoteSelectorModel where
-    type Recv VoteSelectorModel = VoteSelectorMsg
-    type Send VoteSelectorModel = Msg
-    type Init VoteSelectorModel = Maybe VID
-    initModel p = (VoteSelectorModel p, mempty)
-    update (VoteSelectorModel p) (SetVID s) = (VoteSelectorModel $ readMaybe s <|> p, mempty)
-    view m@(VoteSelectorModel p) = mkBox Vertical
-      [ mkLabel "Enter VID"
-      , mkText (maybe "" show p) (Just ([OnFocusLost], wrapMsg m . SetVID))
-      , mkBox Horizontal
-        [ mkButton "Ok" (fmap (returnMsg m) p)
-        , mkButton "Back" (Just (abortMsg m))
-        ]
-      ]
+    ]
 
 
-  data VoteChangerMsg = SetAppointment String
 
-  data VoteChangerModel = VoteChangerModel
+  data ChangerModel = ChangerModel
     { _action :: CRUD.ChangeAction
     , _vote   :: Vote
     }
-  makeLenses ''VoteChangerModel
+  makeLenses ''ChangerModel
 
-  instance HasFormCallbacks VoteChangerModel where
-    type Unwrapped VoteChangerModel = Recv VoteChangerModel
-    type Wrapped VoteChangerModel   = Send VoteChangerModel
-    type Return  VoteChangerModel   = Vote
-    wrapMsg   _ = CRUD.ChangerMsg
-    abortMsg  _ = CRUD.Back
-    returnMsg _ = CRUD.Send
+  data ChangerMsg = SetAppointment String | SendAppointment | CancelChanger
 
-  instance Component VoteChangerModel where
-    type Recv VoteChangerModel = VoteChangerMsg
-    type Send VoteChangerModel = Msg
-    type Init VoteChangerModel = (Vote, CRUD.ChangeAction)
-    initModel (v, m) = (VoteChangerModel m v, mempty)
+  changer :: Component m (Vote, CRUD.ChangeAction) ChangerModel ChangerMsg CRUD.ChangerEvent
+  changer = Component (uncurry ChangerModel . swap) changerUpdate changerView
 
-    update m (SetAppointment s) = (m & vote.appointment %~ flip fromMaybe (parseISO8601 s), mempty)
+  changerUpdate m (SetAppointment a) = ActionModel $ m & vote.appointment %~ flip fromMaybe (readAppointment a)
+  changerUpdate m SendAppointment    = case m^.action of
+    CRUD.ActionCreate ->               ActionEvent $ CRUD.CECreate (m^.vote)
+    CRUD.ActionUpdate ->               ActionEvent $ CRUD.CEUpdate (m^.vote)
+  changerUpdate m CancelChanger      = ActionEvent CRUD.CEClose
 
-    view m = mkBox Vertical $
-      (if (m^.action) == CRUD.Update then (mkLabel ("vid: " ++ show (m^.vote.vid)) :) else id)
-      [ mkBox Horizontal [ mkLabel "Appointment: ", mkText (showISO8601 (m^.vote.appointment)) (Just ([OnFocusLost], wrapMsg m . SetAppointment))     ]
-      , mkBox Horizontal
-        [ mkButton "Ok" (Just (returnMsg m (m^.vote)))
-        , mkButton "Back" (Just (abortMsg m))
-        ]
+  changerView m = mkBox Vertical $
+    (if (m^.action) == CRUD.ActionUpdate then (mkLabel ("VID: " ++ show (m^.vote.vid)) :) else id)
+    [ mkBox Horizontal [ mkLabel "Appointment: ", mkText (show (m^.vote.appointment)) (Just ([OnFocusLost], wrapMsg m . SetAppointment))     ]
+    , mkBox Horizontal
+      [ mkButton "Ok" (Just (returnMsg m (m^.vote)))
+      , mkButton "Back" (Just (abortMsg m))
       ]
+    ]
 
-  data Model = Model
-    { _crud :: CRUD.Model VoteDisplayModel VoteSelectorModel VoteChangerModel () Vote VID
-    , _hostname :: String
-    }
-  makeLenses ''Model
 
-  type Info = CRUD.Info () Vote VID
-  type Actions = CRUD.Actions Vote VID
+  newtype Msg = Msg (CRUD.Msg DisplayMsg SelectorMsg ChangerMsg Vote VID)
 
-  instance Component Model where
-    type Recv Model = Msg
-    type Send Model = Msg
-    type Init Model = String
-    initModel h = let (m, c) = CRUD.initModel (info h) in (Model m h, c)
-    update (Model m h) msg = let (m', c) = CRUD.update m msg in (Model m' h, c)
-    view (Model m h) = mkFrame (Just h) $ CRUD.view m
+  newtype Model = Model (CRUD.Model DisplayModel DisplayMsg SelectorModel SelectorMsg ChangerModel ChangerMsg Vote VID)
+
+  data Event = Event
+
+  -- type Info = CRUD.Info Vote VID
+  -- type Actions = CRUD.Actions Vote VID
+
+  voteCRUD :: Component m String Model Msg Event
+  voteCRUD = Component (Model . info)
+
+  voteUpdate m msg = component m msg Model Msg ...
+    --let (m', c) = CRUD.update m msg in (Model m' h, c)
+  voteView (Model m h) = mkFrame (Just h) $ (CRUD.crudComponent^.view) m
 
   info :: String -> Info
-  info h = CRUD.Info (^.vid) newVote Nothing (actions h) (\a -> showISO8601 (a^.appointment)) ()
+  info h = CRUD.Info (^.vid) newVote Nothing (actions h) (show . (^.appointment))
 
   actions :: String -> Actions
   actions h = CRUD.Actions (createCmd h) (readCmd h) (updateCmd h) (deleteCmd h)

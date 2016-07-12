@@ -16,10 +16,12 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   exposed-modules:     RunApp
+                     , Appointment
                      , Widget
                      , Command
                      , Component
                      , CRUDApp
+                     , Network
                      , ConnectionManager
                      , Poll
                      , PollCRUDApp
