@@ -51,14 +51,13 @@ module Poll
 
   mkVotes :: [String] -> Map String Int -> Either String (Map (Maybe Appointment) Int)
   mkVotes as vs = do
-    as' <- catMaybes <$> mapM readA as
-    vs' <- Map.fromList <$> mapM (\(s,i) -> (,i) <$> readA s ) (Map.assocs vs)
+    as' <- mapM readAppointmentEither as
+    let vs' = Map.mapKeys readAppointmentMaybe vs
     return (mkVotes' as' vs')
-      where readA = (Just <$>) . readAppointmentEither
 
   -- filter map keys, only keep the ones from the List
   mkVotes' :: [Appointment] -> Map (Maybe Appointment) Int -> Map (Maybe Appointment) Int
-  mkVotes' as m = Map.union m (Map.fromList (zip (map Just as) (repeat 0)))
+  mkVotes' as vs = Map.union vs (Map.fromList (zip (map Just as) (repeat 0)))
 
 
   readPoll :: String -> Either String Poll

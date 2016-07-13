@@ -18,10 +18,10 @@ module Network (send) where
   send h r body f = do
     uri <- ExceptT . return . maybe (Left $ "ParseError: Not a valid URI: " ++ h) Right . parseURI $ h
     let req = setRequestBody (mkRequest r uri) ("application/json", body)
-    liftIO . print $ req
+    liftIO . putStrLn . ("request: " ++) . show $ req
     liftIO . putStrLn . rqBody $ req
     response <- join . fmap (withExceptT show . liftExceptT) . withExceptT (show :: IOException -> String) . ExceptT . try . simpleHTTP $ req -- TODO replace show, for better error messages
-    liftIO . print $ response
+    liftIO . putStrLn . ("response: " ++) . show $ response
     liftIO . putStrLn . rspBody $ response
     case rspCode response of
       (2,_,_) ->

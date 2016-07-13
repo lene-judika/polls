@@ -26,12 +26,12 @@ module Vote
 
   data Vote = Vote
     { _vid :: VID
-    , _appointment :: Appointment
+    , _appointment :: Maybe Appointment
     }
   makeLenses ''Vote
 
   newVote :: Vote
-  newVote = Vote 0 (mkAppointment 2016 1 1)
+  newVote = Vote 0 (Just $ mkAppointment 2016 1 1)
 
   readVote :: String -> Either String Vote
   readVote msg = do
@@ -44,7 +44,7 @@ module Vote
     } deriving (Generic, Show)
 
   toVote :: JsonVoteResp -> Either String Vote
-  toVote (JsonVoteResp v a) = Vote v <$> readAppointmentEither a
+  toVote (JsonVoteResp v a) = Vote v <$> if a == "" then Right Nothing else Just <$> readAppointmentEither a
 
   instance FromJSON JsonVoteResp where
     parseJSON (Object v) = JsonVoteResp <$>

@@ -13,12 +13,12 @@ module Appointment (Appointment(), mkAppointment, readAppointmentMaybe, readAppo
   mkAppointment y m d = Appointment $ UTCTime (fromGregorian y m d) (secondsToDiffTime 0)
 
   readAppointmentEither :: String -> Either String Appointment
-  readAppointmentEither s = maybe (Left $ "ParseError: invalid ISO8601-Date: " ++ s) Right (readAppointmentMaybe s)
+  readAppointmentEither s = maybe (Left $ "ParseError: invalid ISO8601-Date: " ++ show s) Right (readAppointmentMaybe s)
 
   readAppointmentMaybe:: String -> Maybe Appointment
   readAppointmentMaybe s = Appointment <$>
     ( parseTimeM False defaultTimeLocale "%Y-%m-%d" s <|>
-    parseTimeM False defaultTimeLocale "%Y-%m-%dT%H:%M" s
+      parseTimeM False defaultTimeLocale "%Y-%m-%dT%H:%M" s
     )
 
   showAppointment :: Appointment -> String

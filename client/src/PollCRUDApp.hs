@@ -53,7 +53,7 @@ module PollCRUDApp
       [ mkLabel ("pid: "      ++ show (p^.pid))
       , mkLabel ("name: "     ++ show (p^.name))
       , mkLabel ("password: " ++ (show . fromMaybe "<unknown>" $ (p^.password)))
-      , mkScrolledWindow $ mkTextList (Map.assocs (p^.votes)) (\(a,v) -> maybe "<deleted>" show a ++ ": " ++ show v) Nothing
+      , mkTextList (Map.assocs (p^.votes)) (\(a,v) -> maybe "<deleted>" show a ++ ": " ++ show v) Nothing
       ]
       , VoteCRUDMsg <$> (VoteCRUD.voteCRUD^.view) m
     ]
@@ -101,6 +101,7 @@ module PollCRUDApp
   changerUpdate m SendPoll           = case m^.action of
     CRUD.ActionCreate -> ActionEvent (CRUD.CECreate (m^.poll))
     CRUD.ActionUpdate -> ActionEvent (CRUD.CEUpdate (m^.poll))
+  changerUpdate _ CancelChanger      = ActionEvent CRUD.CEClose
 
   changerView m = mkBox Vertical $
     (if (m^.action) == CRUD.ActionUpdate then (mkLabel ("pid: " ++ show (m^.poll.pid)) :) else id)

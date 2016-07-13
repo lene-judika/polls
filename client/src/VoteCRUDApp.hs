@@ -46,7 +46,7 @@ module VoteCRUDApp
 
   displayView (DisplayModel v) = mkBox Vertical
     [ mkLabel ("VID: "         ++ show (v^.vid))
-    , mkLabel ("Appointment: " ++ show (v^.appointment))
+    , mkLabel ("Appointment: " ++ maybe "<deleted>" show (v^.appointment))
     ]
 
   data SelectorModel = SelectorModel { cursor :: Maybe VID }
@@ -82,15 +82,18 @@ module VoteCRUDApp
   changer :: Component m (Vote, CRUD.ChangeAction) ChangerModel ChangerMsg (CRUD.ChangerEvent Vote)
   changer = Component (uncurry ChangerModel . swap) changerUpdate changerView
 
-  changerUpdate m (SetAppointment a) = ActionModel $ m & vote.appointment %~ flip fromMaybe (readAppointmentMaybe a)
-  changerUpdate m SendAppointment    = case m^.action of
-    CRUD.ActionCreate ->               ActionEvent $ CRUD.CECreate (m^.vote)
-    CRUD.ActionUpdate ->               ActionEvent $ CRUD.CEUpdate (m^.vote)
+  changerUpdate :: ChangerModel -> ChangerMsg -> Action m ChangerModel ChangerMsg (CRUD.ChangerEvent Vote)
+  changerUpdate m (SetAppointment a) = ActionModel $ m & vote.appointment %~ (readAppointmentMaybe a <|>)
+  changerUpdate m SendAppointment    = case (validate (m^.vote), m^.action) of
+    (Just v, CRUD.ActionCreate) ->               ActionEvent $ CRUD.CECreate v
+    (Just v, CRUD.ActionUpdate) ->               ActionEvent $ CRUD.CEUpdate v
+    _ -> ActionIgnore
+    where validate v = if isJust (v^.appointment) then Just v else Nothing
   changerUpdate m CancelChanger      = ActionEvent CRUD.CEClose
 
   changerView m = mkBox Vertical $
     (if (m^.action) == CRUD.ActionUpdate then (mkLabel ("VID: " ++ show (m^.vote.vid)) :) else id)
-    [ mkBox Horizontal [ mkLabel "Appointment: ", mkText (show (m^.vote.appointment)) (Just ([OnFocusLost], SetAppointment))     ]
+    [ mkBox Horizontal [ mkLabel "Appointment: ", mkText (maybe "<deleted>" show (m^.vote.appointment)) (Just ([OnFocusLost], SetAppointment)) ]
     , mkBox Horizontal
       [ mkButton "Ok"   (Just SendAppointment)
       , mkButton "Back" (Just CancelChanger)
@@ -119,7 +122,7 @@ module VoteCRUDApp
   voteView (Model h m) = mkFrame (Just h) $ CRUDMsg <$> (CRUD.crudComponent^.view) m
 
   info :: String -> Info
-  info h = CRUD.Info (^.vid) newVote Nothing (actions h) (show . (^.appointment)) display selector changer
+  info h = CRUD.Info (^.vid) newVote Nothing (actions h) (maybe "<deleted>" show . (^.appointment)) display selector changer
 
   actions :: String -> Actions
   actions h = CRUD.Actions (createCmd h) (readCmd h) (updateCmd h) (deleteCmd h)
@@ -134,7 +137,7 @@ module VoteCRUDApp
     deriving (Generic)
 
   fromVote :: Vote -> JsonVote
-  fromVote (Vote _ a) = JsonVote . show $ a
+  fromVote (Vote _ a) = JsonVote . show . fromJust $ a
 
   instance ToJSON JsonVote where
     toEncoding (JsonVote a) = pairs ("appointment" .= a)

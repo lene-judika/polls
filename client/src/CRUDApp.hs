@@ -28,7 +28,7 @@ module CRUDApp
   data ChangeAction = ActionUpdate | ActionCreate
     deriving (Eq)
 
-  data Mode sm cm = ModeOverview | ModeRead sm | ModeChange ChangeAction cm
+  data Mode sm cm = ModeOverview | ModeRead sm | ModeChange ChangeAction cm | ModeError String
   makePrisms ''Mode
 
   data Actions m a i = Actions
@@ -112,6 +112,7 @@ module CRUDApp
   crudUpdate :: (Applicative m, Monoid (m (Msg dmsg smsg cmsg a i)), Ord i) =>
     Model m dm dmsg sm smsg cm cmsg a i -> Msg dmsg smsg cmsg a i -> Action m (Model m dm dmsg sm smsg cm cmsg a i) (Msg dmsg smsg cmsg a i) (Event a i)
   crudUpdate m Ignore            = ActionIgnore
+  crudUpdate m (Error s)         = ActionModel $ m & mode      .~ ModeError s
   crudUpdate m Back              = ActionModel $ m & mode      .~ ModeOverview & displayed .~ Nothing
   crudUpdate m (Insert a)        = ActionModel $ m & values    %~ Map.insert ((m^.info.identifier) a) a
   crudUpdate m (Remove i)        = ActionModel $ m & values    %~ Map.delete i
@@ -120,18 +121,17 @@ module CRUDApp
   crudUpdate m ClickRead         = ActionModel $ m & mode      .~ ModeRead ((m^.info.selector.initModel) (m^.info.def))
   crudUpdate m ClickUpdate       = maybe ActionIgnore (\a -> ActionModel $ m & mode .~ ModeChange ActionUpdate ((m^.info.changer.initModel) (a, ActionUpdate))) (selected m)
   crudUpdate m ClickDelete       = maybe ActionIgnore (ActionMsg . DeleteCmd) (selected m)
-  crudUpdate m (CreateCmd a)     = ActionCmd $ fmap (either Error Insert) (m^.info.actions.createCmd $ a) `mappend` pure Back
-  crudUpdate m (ReadCmd i)       = ActionCmd $ fmap (either Error Insert) (m^.info.actions.readCmd $ i)   `mappend` pure Back
-  crudUpdate m (UpdateCmd a)     = ActionCmd $ fmap (either Error Insert) (m^.info.actions.updateCmd $ a) `mappend` pure Back
+  crudUpdate m (CreateCmd a)     = ActionCmd $ fmap (either Error Insert) (m^.info.actions.createCmd $ a)
+  crudUpdate m (ReadCmd i)       = ActionCmd $ fmap (either Error Insert) (m^.info.actions.readCmd $ i)
+  crudUpdate m (UpdateCmd a)     = ActionCmd $ fmap (either Error Insert) (m^.info.actions.updateCmd $ a)
   crudUpdate m (DeleteCmd a)     = ActionCmd $ fmap (either Error (const $ Remove . (m^.info.identifier) $ a)) (m^.info.actions.deleteCmd $ a)
   crudUpdate m (DisplayMsg msg)  = maybe ActionIgnore (\dm -> component dm msg (\dm' -> m & displayed._Just._2  .~ dm') DisplayMsg  displayEvent  (m^.info.display.update))  (m^?displayed._Just._2)
   crudUpdate m (SelectorMsg msg) = maybe ActionIgnore (\sm -> component sm msg (\sm' -> m & mode._ModeRead      .~ sm') SelectorMsg selectorEvent (m^.info.selector.update)) (m^?mode._ModeRead)
   crudUpdate m (ChangerMsg msg)  = maybe ActionIgnore (\cm -> component cm msg (\cm' -> m & mode._ModeChange._2 .~ cm') ChangerMsg  changerEvent  (m^.info.changer.update))  (m^?mode._ModeChange._2)
-  crudUpdate m (Error s)         = ActionIgnore
 
   crudView :: Model m dm dmsg sm smsg cm cmsg a i -> Widget (Msg dmsg smsg cmsg a i)
   crudView (Model i vs c ModeOverview) = mkBox Horizontal $
-    [ mkScrolledWindow $ mkTextList (Map.elems vs) (i^.name) (Just SetCursor) --TODO highlight cursor
+    [ mkTextList (Map.elems vs) (i^.name) (Just SetCursor) --TODO highlight cursor
     , mkBox Vertical
       [ mkButton "Create" (Just ClickCreate)
       , mkButton "Read"   (Just ClickRead)
@@ -144,5 +144,9 @@ module CRUDApp
       Just (_, dm) ->
         [DisplayMsg <$> (i^.display.view) dm]
 
+  crudView (Model i _ _ (ModeError s))     = mkBox Vertical
+    [ mkLabel ("Error: " ++ s)
+    , mkButton "Back" (Just Back)
+    ]
   crudView (Model i _ _ (ModeRead sm))     = SelectorMsg <$> (i^.selector.view) sm
   crudView (Model i _ _ (ModeChange c cm)) = ChangerMsg  <$> (i^.changer.view) cm
