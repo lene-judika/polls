@@ -1,6 +1,6 @@
 name:                client
 version:             0.1.0.0
-synopsis:            Implement a Webservice GUI
+synopsis:            Implement a Webservice
 description:         Please see README.md
 homepage:            https://github.com/githubuser/client#readme
 license:             BSD3
@@ -8,38 +8,22 @@ license-file:        LICENSE
 author:              Stefan Nitz
 maintainer:          nitz.stefan@googlemail.com
 copyright:           2016 Stefan Nitz
-category:            Webservice / GUI
+category:            Webservice
 build-type:          Simple
 -- extra-source-files:
 cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     RunApp
-                     , Appointment
-                     , Widget
-                     , Command
-                     , Component
-                     , CRUDApp
+  exposed-modules:     CommandLine
                      , Network
-                     , ConnectionManager
-                     , Poll
-                     , PollCRUDApp
-                     , Vote
-                     , VoteCRUDApp
   build-depends:       base >= 4.7 && < 5
                      , containers
-                     , template-haskell
-                     , aeson
-                     , lens
-                     , gtk
                      , mtl
-                     , time
+                     , safe
+                     , transformers
                      , HTTP
                      , network-uri
-                     , bytestring
-                     , transformers
-                     , semigroups
   default-language:    Haskell2010
 
 executable client-exe
@@ -47,6 +31,7 @@ executable client-exe
   main-is:             Main.hs
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   build-depends:       base
+                     , transformers
                      , client
   default-language:    Haskell2010
 
