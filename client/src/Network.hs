@@ -5,7 +5,7 @@ module Network (send) where
   import Control.Monad.IO.Class
   import Control.Monad.Trans.Except
 
-  import Network.HTTP hiding (password)
+  import Network.HTTP
   import Network.Stream
   import Network.URI
 

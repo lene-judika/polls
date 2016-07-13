@@ -1,7 +1,14 @@
 {-# LANGUAGE TemplateHaskell, MultiParamTypeClasses, FlexibleInstances, FlexibleContexts, UndecidableInstances, TypeFamilies, DeriveGeneric, OverloadedStrings #-}
 
-module VoteCRUDApp (Model, Msg, initModel, update, view) where
+module VoteCRUDApp
+  ( voteCRUD
+  , Model
+  , Event
+  , Msg
+  ) where
   import Vote
+  import Appointment
+  import Network
 
   import Component
   import Command
@@ -21,19 +28,21 @@ module VoteCRUDApp (Model, Msg, initModel, update, view) where
 
   import Data.Aeson
 
-
   import Control.Applicative
+
+  import Control.Monad.Trans.Except
 
   import Control.Lens hiding (view, (.=))
 
   import Text.Read
+  import Network.HTTP
 
   data DisplayModel = DisplayModel Vote
 
   data DisplayMsg
 
   display :: Component m Vote DisplayModel DisplayMsg (CRUD.DisplayEvent VID)
-  display = Component DisplayModel ActionIgnore displayView
+  display = Component DisplayModel (\_ _ -> ActionIgnore) displayView
 
   displayView (DisplayModel v) = mkBox Vertical
     [ mkLabel ("VID: "         ++ show (v^.vid))
@@ -48,15 +57,15 @@ module VoteCRUDApp (Model, Msg, initModel, update, view) where
   selector = Component SelectorModel selectorUpdate selectorView
 
   selectorUpdate m (SetVID s)     = ActionModel . SelectorModel $ readMaybe s <|> cursor m
-  selectorUpdate m SendVID        = maybe ActionIgnore (ActionEvent CRUD.SESelect) (cursor m)
+  selectorUpdate m SendVID        = maybe ActionIgnore (ActionEvent . CRUD.SESelect) (cursor m)
   selectorUpdate _ CancelSelector = ActionEvent CRUD.SEClose
 
   selectorView m@(SelectorModel p) = mkBox Vertical
     [ mkLabel "Enter VID"
     , mkText (maybe "" show p) (Just ([OnFocusLost], SetVID))
     , mkBox Horizontal
-      [ mkButton "Ok"   SendVID
-      , mkButton "Back" CancelSelector
+      [ mkButton "Ok"   (Just SendVID)
+      , mkButton "Back" (Just CancelSelector)
       ]
     ]
 
@@ -70,10 +79,10 @@ module VoteCRUDApp (Model, Msg, initModel, update, view) where
 
   data ChangerMsg = SetAppointment String | SendAppointment | CancelChanger
 
-  changer :: Component m (Vote, CRUD.ChangeAction) ChangerModel ChangerMsg CRUD.ChangerEvent
+  changer :: Component m (Vote, CRUD.ChangeAction) ChangerModel ChangerMsg (CRUD.ChangerEvent Vote)
   changer = Component (uncurry ChangerModel . swap) changerUpdate changerView
 
-  changerUpdate m (SetAppointment a) = ActionModel $ m & vote.appointment %~ flip fromMaybe (readAppointment a)
+  changerUpdate m (SetAppointment a) = ActionModel $ m & vote.appointment %~ flip fromMaybe (readAppointmentMaybe a)
   changerUpdate m SendAppointment    = case m^.action of
     CRUD.ActionCreate ->               ActionEvent $ CRUD.CECreate (m^.vote)
     CRUD.ActionUpdate ->               ActionEvent $ CRUD.CEUpdate (m^.vote)
@@ -81,32 +90,36 @@ module VoteCRUDApp (Model, Msg, initModel, update, view) where
 
   changerView m = mkBox Vertical $
     (if (m^.action) == CRUD.ActionUpdate then (mkLabel ("VID: " ++ show (m^.vote.vid)) :) else id)
-    [ mkBox Horizontal [ mkLabel "Appointment: ", mkText (show (m^.vote.appointment)) (Just ([OnFocusLost], wrapMsg m . SetAppointment))     ]
+    [ mkBox Horizontal [ mkLabel "Appointment: ", mkText (show (m^.vote.appointment)) (Just ([OnFocusLost], SetAppointment))     ]
     , mkBox Horizontal
-      [ mkButton "Ok" (Just (returnMsg m (m^.vote)))
-      , mkButton "Back" (Just (abortMsg m))
+      [ mkButton "Ok"   (Just SendAppointment)
+      , mkButton "Back" (Just CancelChanger)
       ]
     ]
 
 
-  newtype Msg = Msg (CRUD.Msg DisplayMsg SelectorMsg ChangerMsg Vote VID)
+  data Msg = UpdateEvent | CRUDMsg (CRUD.Msg DisplayMsg SelectorMsg ChangerMsg Vote VID)
 
-  newtype Model = Model (CRUD.Model DisplayModel DisplayMsg SelectorModel SelectorMsg ChangerModel ChangerMsg Vote VID)
+  data Model = Model String (CRUD.Model Cmd DisplayModel DisplayMsg SelectorModel SelectorMsg ChangerModel ChangerMsg Vote VID)
 
-  data Event = Event
+  data Event = VoteUpdate
 
-  -- type Info = CRUD.Info Vote VID
-  -- type Actions = CRUD.Actions Vote VID
+  type Info = CRUD.Info Cmd DisplayModel DisplayMsg SelectorModel SelectorMsg ChangerModel ChangerMsg Vote VID
+  type Actions = CRUD.Actions Cmd Vote VID
 
-  voteCRUD :: Component m String Model Msg Event
-  voteCRUD = Component (Model . info)
+  voteCRUD :: Component Cmd String Model Msg Event
+  voteCRUD = Component (\s -> Model s . (CRUD.crudComponent^.initModel) . info $ s) voteUpdate voteView
 
-  voteUpdate m msg = component m msg Model Msg ...
-    --let (m', c) = CRUD.update m msg in (Model m' h, c)
-  voteView (Model m h) = mkFrame (Just h) $ (CRUD.crudComponent^.view) m
+  voteUpdate :: Model -> Msg -> Action Cmd Model Msg Event
+  voteUpdate _ UpdateEvent = ActionEvent VoteUpdate
+  voteUpdate (Model h m) (CRUDMsg msg) = component m msg (Model h) CRUDMsg (const UpdateEvent) (CRUD.crudComponent^.update)
+
+
+  voteView :: Model -> Widget Msg
+  voteView (Model h m) = mkFrame (Just h) $ CRUDMsg <$> (CRUD.crudComponent^.view) m
 
   info :: String -> Info
-  info h = CRUD.Info (^.vid) newVote Nothing (actions h) (show . (^.appointment))
+  info h = CRUD.Info (^.vid) newVote Nothing (actions h) (show . (^.appointment)) display selector changer
 
   actions :: String -> Actions
   actions h = CRUD.Actions (createCmd h) (readCmd h) (updateCmd h) (deleteCmd h)
@@ -121,7 +134,7 @@ module VoteCRUDApp (Model, Msg, initModel, update, view) where
     deriving (Generic)
 
   fromVote :: Vote -> JsonVote
-  fromVote (Vote _ a) = JsonVote . showISO8601 $ a
+  fromVote (Vote _ a) = JsonVote . show $ a
 
   instance ToJSON JsonVote where
     toEncoding (JsonVote a) = pairs ("appointment" .= a)
@@ -134,23 +147,3 @@ module VoteCRUDApp (Model, Msg, initModel, update, view) where
 
   deleteCmd :: String -> Vote -> Cmd (Either String ())
   deleteCmd h v = cmd . runExceptT $ send (h ++ "/votes/" ++ show (v^.vid)) DELETE (voteBody v) (const (Right ()))
-
-  handleError :: String -> String
-  handleError = id
-
-  liftExceptT = ExceptT . return
-
-  send :: String -> RequestMethod -> String -> (String -> Either String a) ->  ExceptT String IO a
-  send h r body f = do
-    uri <- ExceptT . return . maybe (Left $ "ParseError: Not a valid URI: " ++ h) Right . parseURI $ h
-    let req = setRequestBody (mkRequest r uri) ("application/json", body)
-    liftIO . print $ req
-    liftIO . putStrLn . rqBody $ req
-    response <- join . fmap (withExceptT show . liftExceptT) . withExceptT (show :: IOException -> String) . ExceptT . try . simpleHTTP $ req -- TODO replace show, for better error messages
-    liftIO . print $ response
-    liftIO . putStrLn . rspBody $ response
-    case rspCode response of
-      (2,_,_) ->
-        liftExceptT . f . rspBody $ response
-      _ ->
-        throwE . handleError . rspBody $ response

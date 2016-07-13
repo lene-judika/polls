@@ -1,8 +1,18 @@
 {-# LANGUAGE DeriveFunctor, GeneralizedNewtypeDeriving #-}
 
 module Command (Cmd, cmd, execCmd) where
+  import Control.Applicative
+
   newtype Cmd a = Cmd [IO a]
-    deriving (Functor, Monoid)
+    deriving (Functor)
+
+  instance Applicative Cmd where
+    pure    = cmd . return
+    (Cmd f) <*> (Cmd xs) = Cmd (zipWith (<*>) f xs)
+
+  instance Monoid (Cmd a) where
+    mempty = Cmd []
+    mappend (Cmd xs) (Cmd ys) = Cmd (xs ++ ys)
 
   cmd :: IO a -> Cmd a
   cmd = Cmd . return

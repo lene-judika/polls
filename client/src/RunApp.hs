@@ -12,6 +12,8 @@ module RunApp (runStarterApp, runApp) where
 
   import Control.Arrow
 
+  import Control.Lens hiding (view)
+
   runStarterApp :: model -> (model -> msg -> model) -> (model -> Widget msg) -> IO ()
   runStarterApp i u v = runGui (runStarterApp' i u v)
 
@@ -25,19 +27,22 @@ module RunApp (runStarterApp, runApp) where
       Just n -> runStarterApp' n u v
       Nothing  -> return ()
 
-  runApp :: (Component model, Recv model ~ Send model) => (model, Cmd (Send model)) -> (model -> Recv model -> (model, Cmd (Send model))) -> (model -> Widget (Send model)) -> IO ()
-  runApp i u v = runGui (runApp' i u v)
+  runApp :: Program Cmd model msg -> IO ()
+  runApp = runGui . runApp'
 
-  runApp' :: (model, Cmd msg) -> (model -> msg -> (model, Cmd msg)) -> (model -> Widget msg) -> Gui msg ()
-  runApp' (i, c) u v = do
-    i' <- liftIO $ execCmd u i c -- TODO split cmds here -- XXX forgot what this TODO means -- TODO write better TODO notes
+  runApp' :: Program Cmd model msg -> Gui msg ()
+  runApp' p = do
+    --i' <- liftIO $ execCmd u i c -- TODO split cmds here -- XXX forgot what this TODO means -- TODO write better TODO notes
 
-    a <- buildGui (v i')
+    a <- buildGui ((p^.view) (p^.initModel))
 
-    let (i'', cs) = applyMsgs u i' a
+    let (m', cs) = applyMsgs (p^.update) (p^.initModel) a
 
-    case i'' of
-      Just n -> runApp' (n, cs) u v
+
+    case m' of
+      Just n -> do
+        n' <- liftIO $ execCmd (p^.update) n cs
+        runApp' (p & initModel .~ n')
       Nothing  -> return ()
 
   applyMsgs :: (model -> msg -> (model, Cmd msg)) -> model -> MsgBox msg -> (Maybe model, Cmd msg)

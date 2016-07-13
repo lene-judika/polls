@@ -44,8 +44,8 @@ module Component
     }
   makeFields ''Component
 
-  program :: (Functor m, Monoid (m msg)) => init -> Component m init model msg event -> Program m model msg
-  program i c = Program ((c^.initModel) i) (programU (c^.update)) (c^.view)
+  program :: (Functor m, Monoid (m msg)) => Component m init model msg event -> init  -> Program m model msg
+  program c i = Program ((c^.initModel) i) (programU (c^.update)) (c^.view)
 
   -- | Forward messages to a child component.
   component :: Functor m => model -> msg -> (model -> model') -> (msg -> msg') -> (event -> msg') -> (model -> msg -> Action m model msg event) -> Action m model' msg' event'

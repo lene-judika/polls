@@ -1,11 +1,16 @@
 {-# LANGUAGE TemplateHaskell, MultiParamTypeClasses, FlexibleInstances, FlexibleContexts, UndecidableInstances, TypeFamilies, DeriveGeneric, OverloadedStrings #-}
 
-module PollCRUDApp (Model, Msg, initModel, update, view) where
+module PollCRUDApp
+  ( pollCRUD
+  , Model
+  , Msg
+  ) where
   import Poll
-
+  import Appointment
   import Component
   import Command
   import Widget
+  import Network
   import qualified CRUDApp as CRUD
   import qualified VoteCRUDApp as VoteCRUD
 
@@ -22,115 +27,114 @@ module PollCRUDApp (Model, Msg, initModel, update, view) where
   import Data.Aeson
 
   import Control.Applicative
+  import Control.Monad.Trans.Except
 
   import Control.Lens hiding (view, (.=))
 
   import Text.Read
+  import Network.HTTP hiding (password)
 
+  data DisplayModel = DisplayModel Poll VoteCRUD.Model
 
+  data DisplayMsg = VoteCRUDMsg VoteCRUD.Msg | VoteEvent VoteCRUD.Event
 
-  data PollDisplayModel = PollDisplayModel Poll VoteCRUD.Model
+  display :: String -> Component Cmd Poll DisplayModel DisplayMsg (CRUD.DisplayEvent PID)
+  display h = Component (displayInit h) displayUpdate displayView
 
-  data PollDisplayMsg = VoteCRUDMsg VoteCRUD.Msg
+  displayInit :: String -> Poll ->  DisplayModel
+  displayInit h p = DisplayModel p ((VoteCRUD.voteCRUD^.initModel) (h ++ "/polls/" ++ show (p^.pid)))
 
-  pollDisplay :: String -> Component m Poll PollDisplayModel PollDisplayMsg (CRUD.DisplayEvent PID)
-  pollDisplay h = Component (displayInit h) displayUpdate displayView
+  displayUpdate :: DisplayModel -> DisplayMsg -> Action Cmd DisplayModel DisplayMsg (CRUD.DisplayEvent PID)
+  displayUpdate (DisplayModel p m) (VoteCRUDMsg msg) = component m msg (DisplayModel p) VoteCRUDMsg VoteEvent (VoteCRUD.voteCRUD^.update)
+  displayUpdate (DisplayModel p m) (VoteEvent _) = ActionEvent (CRUD.DEChanged (p^.pid))
 
-  displayInit :: String -> Poll ->  PollDisplayModel
-  displayInit h p = PollDisplayModel p ((voteComponent^.initModel) (h ++ "/polls/" ++ show (p^.pid)))
-    --let (m',c) = initModel (h ++ "/polls/" ++ show (p^.pid)) in (PollDisplayModel p m', fmap VoteCRUDMsg c)
-  update (PollDisplayModel p m) (VoteCRUDMsg msg) = let (m', c) = update m msg in (PollDisplayModel p m', fmap VoteCRUDMsg c)
-  view (PollDisplayModel p m) = mkBox Horizontal
+  displayView (DisplayModel p m) = mkBox Horizontal
     [ mkBox Vertical
       [ mkLabel ("pid: "      ++ show (p^.pid))
       , mkLabel ("name: "     ++ show (p^.name))
       , mkLabel ("password: " ++ (show . fromMaybe "<unknown>" $ (p^.password)))
       , mkScrolledWindow $ mkTextList (Map.assocs (p^.votes)) (\(a,v) -> maybe "<deleted>" show a ++ ": " ++ show v) Nothing
       ]
-      , VoteCRUDMsg <$> view m
+      , VoteCRUDMsg <$> (VoteCRUD.voteCRUD^.view) m
     ]
 
-  data PollSelectorModel = PollSelectorModel (Maybe PID)
+  data SelectorModel = SelectorModel (Maybe PID)
 
-  data PollSelectorMsg = SetPID String
+  data SelectorMsg = SetPID String | SendPID | CancelSelector
 
-  instance Component PollSelectorModel where
-    type Recv PollSelectorModel = PollSelectorMsg
-    type Send PollSelectorModel = Msg
-    type Init PollSelectorModel = Maybe PID
-    initModel p = (PollSelectorModel p, mempty)
-    update (PollSelectorModel p) (SetPID s) = (PollSelectorModel $ readMaybe s <|> p, mempty)
-    view m@(PollSelectorModel p) = mkBox Vertical
-      [ mkLabel "Enter PID"
-      , mkText (maybe "" show p) (Just ([OnFocusLost], wrapMsg m . SetPID))
-      , mkBox Horizontal
-        [ mkButton "Ok" (fmap (returnMsg m) p)
-        , mkButton "Back" (Just (abortMsg m))
-        ]
+  selector :: Component Cmd (Maybe PID) SelectorModel SelectorMsg (CRUD.SelectorEvent PID)
+  selector = Component SelectorModel selectorUpdate selectorView
+
+  selectorUpdate :: SelectorModel -> SelectorMsg -> Action Cmd SelectorModel SelectorMsg (CRUD.SelectorEvent PID)
+  selectorUpdate (SelectorModel p) (SetPID s) = ActionModel (SelectorModel $ readMaybe s <|> p)
+  selectorUpdate (SelectorModel p) SendPID = maybe ActionIgnore (ActionEvent . CRUD.SESelect) p
+  selectorUpdate (SelectorModel p) CancelSelector = ActionEvent CRUD.SEClose
+
+  selectorView m@(SelectorModel p) = mkBox Vertical
+    [ mkLabel "Enter PID"
+    , mkText (maybe "" show p) (Just ([OnFocusLost], SetPID))
+    , mkBox Horizontal
+      [ mkButton "Ok"   (Just SendPID)
+      , mkButton "Back" (Just CancelSelector)
       ]
+    ]
 
+  data ChangerMsg = SetName String | SetPassword String | AddAppointment | RemoveAppointment | SetCursor (Maybe Appointment) | SetAppointment String | SendPoll | CancelChanger
 
-
-  data PollChangerMsg = SetName String | SetPassword String | Add | Remove | SetCursor (Maybe Appointment) | SetTemp String
-
-  data PollChangerModel = PollChangerModel
-    { _action :: CRUD.ChangeAction
-    , _cursor :: Maybe (Maybe Appointment)
+  data ChangerModel = ChangerModel
+    { _cursor :: Maybe (Maybe Appointment)
     , _new    :: String
     , _poll   :: Poll
+    , _action :: CRUD.ChangeAction
     }
-  makeLenses ''PollChangerModel
+  makeLenses ''ChangerModel
 
-  instance Component PollChangerModel where
-    type Recv PollChangerModel = PollChangerMsg
-    type Send PollChangerModel = Msg
-    type Init PollChangerModel = (Poll, CRUD.ChangeAction)
-    initModel (p, m) = (PollChangerModel m Nothing "" p, mempty)
+  changer :: Component Cmd (Poll, CRUD.ChangeAction) ChangerModel ChangerMsg (CRUD.ChangerEvent Poll)
+  changer = Component (uncurry $ ChangerModel Nothing "") changerUpdate changerView
 
-    update m (SetName s)     = (m & poll.name .~ s,                                       mempty)
-    update m (SetPassword s) = (m & poll.password .~ if s == "" then Nothing else Just s, mempty)
-    update m (SetCursor a)   = (m & cursor ?~ a, mempty)
-    update m Add             = (maybe m (\k -> m & poll.votes %~ Map.insert (Just k) 0 ) (parseISO8601 (m^.new)), mempty)
-    update m Remove          = (maybe m (\k -> m & poll.votes %~ Map.delete k) (m^.cursor), mempty)
-    update m (SetTemp s)     = (m & new .~ s, mempty)
+  changerUpdate m (SetName s)        = ActionModel $ m & poll.name     .~ s
+  changerUpdate m (SetPassword s)    = ActionModel $ m & poll.password .~ if s == "" then Nothing else Just s
+  changerUpdate m (SetCursor a)      = ActionModel $ m & cursor        ?~ a
+  changerUpdate m (SetAppointment s) = ActionModel $ m & new           .~ s
+  changerUpdate m AddAppointment     = maybe ActionIgnore (\k -> ActionModel $ m & poll.votes %~ Map.insert (Just k) 0 ) (readAppointmentMaybe (m^.new))
+  changerUpdate m RemoveAppointment  = maybe ActionIgnore (\k -> ActionModel $ m & poll.votes %~ Map.delete k) (m^.cursor)
+  changerUpdate m SendPoll           = case m^.action of
+    CRUD.ActionCreate -> ActionEvent (CRUD.CECreate (m^.poll))
+    CRUD.ActionUpdate -> ActionEvent (CRUD.CEUpdate (m^.poll))
 
-    view m = mkBox Vertical $
-      (if (m^.action) == CRUD.Update then (mkLabel ("pid: " ++ show (m^.poll.pid)) :) else id)
-      [ mkBox Horizontal [ mkLabel "Name: ",     mkText (m^.poll.name)                    (Just ([OnFocusLost], wrapMsg m . SetName))     ]
-      , mkBox Horizontal [ mkLabel "Password: ", mkText (fromMaybe "" (m^.poll.password)) (Just ([OnFocusLost], wrapMsg m . SetPassword)) ]
-      , mkFrame (Just "Appointments") $ mkBox Vertical
-        [ mkScrolledWindow $ mkTextList (Map.keys (m^.poll.votes)) (maybe "<deleted>" showISO8601) (Just (wrapMsg m . SetCursor))
-        , mkBox Horizontal [mkButton "Add"    (Just (wrapMsg m Add)), mkButton "Remove" (Just (wrapMsg m Remove)) ]
-        , mkText (m^.new) (Just ([OnFocusLost], wrapMsg m . SetTemp))
-        ]
-      , mkBox Horizontal
-        [ mkButton "Ok" (Just (returnMsg m (m^.poll)))
-        , mkButton "Back" (Just (abortMsg m))
-        ]
+  changerView m = mkBox Vertical $
+    (if (m^.action) == CRUD.ActionUpdate then (mkLabel ("pid: " ++ show (m^.poll.pid)) :) else id)
+    [ mkBox Horizontal [ mkLabel "Name: ",     mkText (m^.poll.name)                    (Just ([OnFocusLost], SetName))     ]
+    , mkBox Horizontal [ mkLabel "Password: ", mkText (fromMaybe "" (m^.poll.password)) (Just ([OnFocusLost], SetPassword)) ]
+    , mkFrame (Just "Appointments") $ mkBox Vertical
+      [ mkScrolledWindow $ mkTextList (Map.keys (m^.poll.votes)) (maybe "<deleted>" show) (Just SetCursor)
+      , mkBox Horizontal [mkButton "Add"    (Just AddAppointment), mkButton "Remove" (Just RemoveAppointment) ]
+      , mkText (m^.new) (Just ([OnFocusLost], SetAppointment))
       ]
+    , mkBox Horizontal
+      [ mkButton "Ok" (Just SendPoll)
+      , mkButton "Back" (Just CancelChanger)
+      ]
+    ]
 
 
-  --type Msg = CRUD.Msg PollDisplayMsg PollSelectorMsg PollChangerMsg Poll PID
+  data Msg = CRUDEvent | CRUDMsg (CRUD.Msg DisplayMsg SelectorMsg ChangerMsg Poll PID)
 
-  data Model = Model
-    { _crud :: CRUD.Model PollDisplayModel PollSelectorModel PollChangerModel String Poll PID
-    , _hostname :: String
-    }
-  makeLenses ''Model
+  data Model = Model String (CRUD.Model Cmd DisplayModel DisplayMsg SelectorModel SelectorMsg ChangerModel ChangerMsg Poll PID)
 
-  type Info = CRUD.Info String Poll PID
-  type Actions = CRUD.Actions Poll PID
+  type Info = CRUD.Info Cmd DisplayModel DisplayMsg SelectorModel SelectorMsg ChangerModel ChangerMsg Poll PID
+  type Actions = CRUD.Actions Cmd Poll PID
 
-  instance Component Model where
-    type Recv Model = Msg
-    type Send Model = Msg
-    type Init Model = String
-    initModel h = let (m, c) = CRUD.initModel (info h) in (Model m h, c)
-    update (Model m h) msg = let (m', c) = CRUD.update m msg in (Model m' h, c)
-    view (Model m h) = mkFrame (Just h) $ CRUD.view m
+  data Event
+
+  pollCRUD :: Component Cmd String Model Msg Event
+  pollCRUD = Component (\h -> Model h ((CRUD.crudComponent^.initModel) (info h))) pollUpdate pollView
+
+  pollUpdate (Model h m) (CRUDMsg msg) = component m msg (Model h) CRUDMsg (const CRUDEvent) (CRUD.crudComponent^.update)
+  pollView (Model h m) = mkFrame (Just h) $ CRUDMsg <$> (CRUD.crudComponent^.view) m
 
   info :: String -> Info
-  info h = CRUD.Info (^.pid) newPoll Nothing (actions h) (^.name) h
+  info h = CRUD.Info (^.pid) newPoll Nothing (actions h) (^.name) (display h) selector changer
 
   actions :: String -> Actions
   actions h = CRUD.Actions (createCmd h) (readCmd h) (updateCmd h) (deleteCmd h)
@@ -150,7 +154,7 @@ module PollCRUDApp (Model, Msg, initModel, update, view) where
     deriving (Generic)
 
   instance FromPoll JsonPoll where
-    fromPoll (Poll _ name vs pw) = JsonPoll name (map showISO8601 . catMaybes . Map.keys $ vs) (fromMaybe "" pw)
+    fromPoll (Poll _ name vs pw) = JsonPoll name (map show . catMaybes . Map.keys $ vs) (fromMaybe "" pw)
 
   instance ToJSON JsonPoll where
     toEncoding (JsonPoll name as pw) =

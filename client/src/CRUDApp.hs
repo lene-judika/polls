@@ -8,6 +8,8 @@ module CRUDApp
   , ChangerEvent(..)
   , Model
   , Msg
+  , Info(..)
+  , Actions(..)
   ) where
 
   import Widget
