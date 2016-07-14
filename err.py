@@ -2,7 +2,7 @@
 
 NO_PID = {'statuscode':404, 'reason': "this PID does not exist."}
 
-NO_VID = {'statuscode':404, 'reason': "this VID does not exist."}
+NO_VID = {'statuscode':404, 'reason': "this VID does not exist (at least not for this PID...)."}
 
 SYNTAX_DATE = {'statuscode':400, 'reason': 'Syntax error datetime format'}
 

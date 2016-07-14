@@ -90,6 +90,13 @@ def validateID( col, id, table):
     print stmt
     return (dbCall(stmt)[0]['c'] == 1)
 
+#*******************************************************************************
+def validateVID( vid, pid):
+    stmt = "select count(*) as c \
+            from votes \
+            where vid={0} and pid={1}".format(vid, pid)
+    print stmt
+    return (dbCall(stmt)[0]['c'] == 1)
 
 #*******************************************************************************
 def stmtNextID(id, table):
@@ -295,15 +302,16 @@ def deletePoll(obj):
 
 #*******************************************************************************
 def getVote(obj):
-    vid = obj['vid']
-    if not isInt(vid) or not validateID('vid', vid, 'votes'):
-        response.status = 404
-        return err.NO_VID
 
     pid = obj['pid']
     if not isInt(pid) or not validateID('pid', pid, 'polls'):
         response.status = 404
         return err.NO_PID
+
+    vid = obj['vid']
+    if not isInt(vid) or not validateVID(vid,pid):
+        response.status = 404
+        return err.NO_VID
 
     stmt = "select a.date as appointment, v.vid as VID\
             from appointments a, votes v\
@@ -313,15 +321,16 @@ def getVote(obj):
 
 #*******************************************************************************
 def deleteVote(obj):
-    vid = obj['vid']
-    if not isInt(vid) or not validateID('vid', vid, 'votes'):
-        response.status = 404
-        return err.NO_VID
 
     pid = obj['pid']
     if not isInt(pid) or not validateID('pid', pid, 'polls'):
         response.status = 404
         return err.NO_PID
+
+    vid = obj['vid']
+    if not isInt(vid) or not validateVID(vid,pid):
+        response.status = 404
+        return err.NO_VID
 
     stmt = "delete from votes where pid={0} and vid={1}".format(pid, vid)
     ret = dbCall(stmt)
@@ -343,7 +352,7 @@ def putVote(obj):
         return err.NO_PID
 
     vid = obj['vid']
-    if not isInt(vid) or not validateID('vid', vid, 'votes'):
+    if not isInt(vid) or not validateVID(vid,pid):
         response.status = 404
         return err.NO_VID
 
