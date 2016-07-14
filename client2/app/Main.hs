@@ -19,7 +19,7 @@ module Main (main) where
 
   main = do
     args <- getArgs
-    let req = runCommandLine args cmd
+    let req = runCommandLine args getRequest
     res <- runExceptT $ liftExceptT req >>= send
 
     either (putStrLn . ("Error: " ++)) putStrLn res
@@ -30,8 +30,8 @@ module Main (main) where
   convert Put    = PUT
   convert Delete = DELETE
 
-  cmd :: CommandLine Request_String
-  cmd = do
+  getRequest :: CommandLine Request_String
+  getRequest = do
     rawHost <- getArg "Host"
     method <- readArg "Request-Method"
     target <- readArg "Target"
