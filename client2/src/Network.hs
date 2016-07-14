@@ -5,7 +5,12 @@ module Network
   , URI
   , relativeTo
   , RequestMethod(..)
+  , request
+  , Request_String
+  , liftExceptT
   ) where
+
+  import Data.Functor.Identity
 
   import Control.Exception
   import Control.Monad
@@ -16,22 +21,21 @@ module Network
   import Network.Stream
   import Network.URI
 
-  liftExceptT = ExceptT . return
-
-  a =. b = (a, b)
-
+  hdrAccept :: Header
   hdrAccept = mkHeader HdrAccept "application/json"
 
+  headers :: Maybe String -> [Header]
   headers t = maybe id ((:) . mkHeader HdrAuthorization) t [hdrAccept]
 
-  send :: URI -> RequestMethod -> Maybe String -> String -> ExceptT String IO String
-  send uri r token body = do
-    let req = insertHeaders (headers token) $ setRequestBody (mkRequest r uri) ("application/json", body)
-    -- liftIO . putStrLn . ("request: " ++) . show $ req
-    -- liftIO . putStrLn . rqBody $ req
+  liftExceptT :: Either e a -> ExceptT e IO a
+  liftExceptT = ExceptT . return
+
+  request :: URI -> RequestMethod -> Maybe String -> String -> Request_String
+  request uri r token body = insertHeaders (headers token) $ setRequestBody (mkRequest r uri) ("application/json", body)
+
+  send :: Request_String -> ExceptT String IO String
+  send req = do
     response <- join . fmap (withExceptT show . liftExceptT) . withExceptT (show :: IOException -> String) . ExceptT . try . simpleHTTP $ req -- TODO replace show, for better error messages
-    -- liftIO . putStrLn . ("response: " ++) . show $ response
-    -- liftIO . putStrLn . rspBody $ response
     case rspCode response of
       (2,_,_) ->
         return . rspBody $ response

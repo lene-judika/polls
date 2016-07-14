@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, DeriveFunctor #-}
 
 module CommandLine
   ( CommandLine
@@ -6,31 +6,39 @@ module CommandLine
   , readArg
   , runCommandLine
   , unwrap
+  , abort
   ) where
 
   import Control.Monad.Except
   import Control.Monad.State
 
-  import Safe
+  import Control.Monad.Free
 
   import Text.Read (readMaybe)
 
-  type CommandLine = StateT [String] (ExceptT String IO)
+  data CommandLineF a =
+      GetArg String (String -> a)
+    | Abort String
+    deriving(Functor)
 
-  runCommandLine :: [String] -> CommandLine a -> IO (Either String a)
-  runCommandLine args cmd = runExceptT $ evalStateT cmd args
+  type CommandLine = Free CommandLineF
 
-  unwrap :: MonadError String m => Maybe a -> String -> m a
-  unwrap m s = maybe (throwError s) return m
+  runCommandLine :: [String] -> CommandLine a -> Either String a
+  runCommandLine _      (Pure a)               = Right a
+  runCommandLine []     (Free (GetArg name _)) = Left ("Missing argument: " ++ show name)
+  runCommandLine (a:as) (Free (GetArg name f)) = runCommandLine as $ f a
+  runCommandLine _      (Free (Abort reason))  = Left reason
 
   getArg :: String -> CommandLine String
-  getArg name = do
-    args <- get
-    (arg, args') <- unwrap ((,) <$> headMay args <*> tailMay args) ("Missing argument: " ++ show name)
-    put args'
-    return arg
+  getArg name = liftF $ GetArg name id
+
+  abort :: String -> CommandLine a
+  abort s = liftF $ Abort s
+
+  unwrap :: Maybe a -> String -> CommandLine a
+  unwrap m s = maybe (abort s) return m
 
   readArg :: Read a => String -> CommandLine a
   readArg name = do
     arg <- getArg name
-    unwrap (readMaybe arg) ("Invalid " ++ name ++ ": " ++ show arg) 
+    unwrap (readMaybe arg) ("Invalid " ++ name ++ ": " ++ show arg)

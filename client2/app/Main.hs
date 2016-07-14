@@ -19,8 +19,10 @@ module Main (main) where
 
   main = do
     args <- getArgs
-    res <- runCommandLine args cmd
-    either (putStrLn . ("Error: " ++)) return res
+    let req = runCommandLine args cmd
+    res <- runExceptT $ liftExceptT req >>= send
+
+    either (putStrLn . ("Error: " ++)) putStrLn res
 
   convert :: Method -> RequestMethod
   convert Get    = GET
@@ -28,14 +30,14 @@ module Main (main) where
   convert Put    = PUT
   convert Delete = DELETE
 
-  cmd :: CommandLine ()
+  cmd :: CommandLine Request_String
   cmd = do
     rawHost <- getArg "Host"
     method <- readArg "Request-Method"
     target <- readArg "Target"
 
     if target == Vote && method == Get then
-      throwError "Get on Votes is not supported"
+      abort "Get on Votes is not supported"
     else do
       pidPath <- fmap ("/appointments" ++) $ if method /= Post || target == Vote then do
         pid <- getArg "PID"
@@ -63,5 +65,4 @@ module Main (main) where
       else
         return ""
 
-      resp <- lift $ send host (convert method) token json
-      liftIO $ putStrLn resp
+      return $ request host (convert method) token json
