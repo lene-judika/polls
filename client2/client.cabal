@@ -18,7 +18,6 @@ library
   exposed-modules:     CommandLine
                      , Network
   build-depends:       base >= 4.7 && < 5
-                     , containers
                      , mtl
                      , safe
                      , transformers
@@ -32,6 +31,7 @@ executable client-exe
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   build-depends:       base
                      , transformers
+                     , mtl
                      , client
   default-language:    Haskell2010
 

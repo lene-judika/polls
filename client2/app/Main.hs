@@ -7,6 +7,7 @@ module Main (main) where
   import System.Environment
   import Control.Monad.Trans.Class
   import Control.Monad.IO.Class
+  import Control.Monad.Except
 
   import Text.Read hiding (lift)
 
@@ -18,7 +19,7 @@ module Main (main) where
 
   main = do
     args <- getArgs
-    res <- runCommandLine cmd args
+    res <- runCommandLine args cmd
     either (putStrLn . ("Error: " ++)) return res
 
   convert :: Method -> RequestMethod
@@ -30,43 +31,37 @@ module Main (main) where
   cmd :: CommandLine ()
   cmd = do
     rawHost <- getArg "Host"
+    method <- readArg "Request-Method"
+    target <- readArg "Target"
 
-    rawMethod <- getArg "Request Method"
-    method <- liftMaybe ("Invalid Method: " ++ rawMethod) (readMaybe rawMethod)
+    if target == Vote && method == Get then
+      throwError "Get on Votes is not supported"
+    else do
+      pidPath <- fmap ("/appointments" ++) $ if method /= Post || target == Vote then do
+        pid <- getArg "PID"
+        return ("/" ++ pid)
+      else
+        return ""
 
-    rawTarget <- getArg "Target"
-    target <- liftMaybe ("Invalid Target: " ++ rawTarget) (readMaybe rawTarget)
+      vidPath <- if method /= Post && target == Vote then do
+        vid <- getArg "VID"
+        return ("/votes/" ++ vid)
+      else
+        return ""
 
-    when (target == Vote && method == Get) $ do
-      liftIO $ putStrLn "GET on Votes is not supported"
-      return ()
-    unless (target == Vote && method == Get) $ do
-      pidPath <- fmap ("/appointments" ++) $ case (method, target) of
-        (m, t) | m /= Post || t == Vote -> do
-          pid <- getArg "PID"
-          return ("/" ++ pid)
-        _ -> return ""
+      let rawHost' = rawHost ++ pidPath ++ vidPath
 
-      let pidHost = rawHost ++ pidPath
+      host <- unwrap (parseURI rawHost') ("Invalid host: " ++ show rawHost')
 
-      vidPath <- case (method, target) of
-        (m, t) | m /= Post && t == Vote -> do
-          vid <- getArg "VID"
-          return ("/votes/" ++ vid)
-        _ -> return ""
+      token <- if method == Put || method == Delete then
+        Just <$> getArg "Token"
+      else
+        return Nothing
 
-      let vidHost = pidHost ++ vidPath
+      json <- if method == Put || method == Post then
+        getArg "Data"
+      else
+        return ""
 
-      host <- liftMaybe ("Invalid host: " ++ vidHost) (parseURI vidHost)
-
-      token <- case method of
-        m | m == Put || m == Delete -> do
-          token <- getArg "Token"
-          return (Just token)
-        _ -> return Nothing
-
-      json <- getArg "Data"
-
-      liftIO $ print vidHost
       resp <- lift $ send host (convert method) token json
       liftIO $ putStrLn resp
